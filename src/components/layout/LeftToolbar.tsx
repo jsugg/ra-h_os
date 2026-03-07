@@ -9,6 +9,7 @@ import {
   Map,
   Folder,
   Table2,
+  BookOpen,
   Settings,
 } from 'lucide-react';
 import type { PaneType } from '../panes/types';
@@ -30,6 +31,7 @@ const PANE_TYPE_ICONS: Record<string, typeof LayoutList> = {
   map: Map,
   dimensions: Folder,
   table: Table2,
+  skills: BookOpen,
 };
 
 const PANE_TYPE_LABELS: Record<string, string> = {
@@ -37,9 +39,10 @@ const PANE_TYPE_LABELS: Record<string, string> = {
   map: 'Map',
   dimensions: 'Dimensions',
   table: 'Table',
+  skills: 'Skills',
 };
 
-// Pane types shown in the toolbar (excludes 'node', 'chat', and 'guides' which is in settings)
+// Pane types shown in the toolbar center section (skills is pinned above settings)
 const TOOLBAR_PANE_TYPES: PaneType[] = ['views', 'map', 'dimensions', 'table'];
 
 interface ToolbarButtonProps {
@@ -224,8 +227,16 @@ export default function LeftToolbar({
         })}
       </div>
 
-      {/* Bottom section - Settings */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      {/* Bottom section - Skills + Settings */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
+        <PaneTypeButton
+          icon={BookOpen}
+          label="Skills"
+          paneType="skills"
+          isOpen={openPaneTypes.has('skills')}
+          isActivePane={activePaneType === 'skills'}
+          onClick={() => onPaneTypeClick('skills')}
+        />
         <ToolbarButton
           icon={Settings}
           label="Settings"
