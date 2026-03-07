@@ -208,8 +208,9 @@ Without sqlite-vec, everything works except semantic/vector search.
 
 ---
 
-## More
+## Community
 
+- **Discord:** [discord.gg/3cpQj6Jtc9](https://discord.gg/3cpQj6Jtc9) — ask questions, share your setup, get help
 - **Full docs:** [ra-h.app/docs/open-source](https://ra-h.app/docs/open-source)
 - **Issues:** [github.com/bradwmorris/ra-h_os/issues](https://github.com/bradwmorris/ra-h_os/issues)
 - **License:** MIT

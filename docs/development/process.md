@@ -1,11 +1,13 @@
 # Development Process (RA-OS)
 
-This repo is the open-source build of RA-H. Keep changes focused, reviewable, and easy to sync upstream.
+This repo is the open-source build of RA-H. Keep changes focused, reviewable, and easy to maintain.
+
+`AGENTS.md` is the source of truth for agent/contributor workflow in this repository.
 
 ## Branching
 
 - Create a feature branch off `main` for all changes.
-- Use short, descriptive names: `docs-...`, `fix-...`, `feat-...`.
+- Use short, descriptive names: `docs/<short-name>`, `fix/<short-name>`, `feat/<short-name>`.
 - Avoid direct commits to `main`.
 
 ## Local Setup
@@ -43,6 +45,6 @@ npm run build
 
 ## Sync Policy (Private Upstream)
 
-- Changes land in `ra-h_os` first.
-- If a change should exist in the private repo, it will be ported upstream.
+- `ra-h_os` accepts direct contributions.
+- Maintainers may port relevant changes between public and private repos.
 - Public contributions will not be overwritten by syncs.

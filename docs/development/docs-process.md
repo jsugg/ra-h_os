@@ -7,7 +7,7 @@ Docs should be short, accurate, and easy to scan. Prefer clarity over completene
 - `README.md` — one-page product + quick start.
 - `docs/README.md` — docs index (add new docs here).
 - `docs/0_overview.md` — product overview + core concepts.
-- `docs/4_tools-and-workflows.md` — MCP tools + guides.
+- `docs/4_tools-and-guides.md` — MCP tools + guides.
 - `docs/8_mcp.md` — setup + troubleshooting for MCP.
 
 ## Update Rules

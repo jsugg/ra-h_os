@@ -1,6 +1,6 @@
 # Contributing
 
-This is the open source mirror of a private repository. Features are developed privately and synced here.
+This is the open source build of RA-H. It accepts direct contributions, and maintainers may sync relevant changes with a private upstream.
 
 **Full docs:** [ra-h.app/docs](https://ra-h.app/docs)
 
@@ -10,7 +10,7 @@ This is the open source mirror of a private repository. Features are developed p
 - **Doc improvements** – typos, clarifications, examples
 - **Small enhancements** – that don't require architectural changes
 
-For larger features, open an issue first. Major features are typically implemented in the private repo and synced here.
+For larger features, open an issue first so scope and direction are clear.
 
 ## Setup
 
@@ -33,6 +33,8 @@ npm run lint
 
 All three must pass.
 
+Agent/contributor workflow: see `AGENTS.md`.
+
 ## Code Style
 
 - TypeScript with strict types (avoid `any`)
@@ -43,7 +45,7 @@ All three must pass.
 ## What Happens to Your Contribution
 
 1. We review and merge here
-2. If applicable, we port to the private repo
+2. If applicable, maintainers port the change to the private repo
 3. Future syncs won't overwrite your contribution
 
 ## License
