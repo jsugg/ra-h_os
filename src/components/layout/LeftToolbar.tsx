@@ -11,8 +11,11 @@ import {
   Table2,
   BookOpen,
   Settings,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import type { PaneType } from '../panes/types';
+import type { Theme } from '@/hooks/useTheme';
 
 interface LeftToolbarProps {
   onSearchClick: () => void;
@@ -23,6 +26,8 @@ interface LeftToolbarProps {
   activePane: 'A' | 'B';
   slotAType: PaneType | null;
   slotBType: PaneType | null;
+  theme: Theme;
+  onThemeToggle: () => void;
 }
 
 // Map pane types to their icons (chat removed in rah-light, guides moved to settings)
@@ -69,8 +74,8 @@ function ToolbarButton({ icon: Icon, label, shortcut, onClick, disabled, isActiv
         height: '36px',
         borderRadius: '8px',
         border: 'none',
-        background: isHovered ? '#1a1a1a' : 'transparent',
-        color: isActive ? '#22c55e' : (isHovered ? '#aaa' : '#666'),
+        background: isHovered ? 'var(--rah-bg-active)' : 'transparent',
+        color: isActive ? 'var(--rah-accent-green)' : (isHovered ? 'var(--rah-text-secondary)' : 'var(--rah-text-muted)'),
         cursor: disabled ? 'not-allowed' : 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -99,9 +104,9 @@ function PaneTypeButton({ icon: Icon, label, paneType: _paneType, isOpen, isActi
   // Determine color: green if open, brighter if it's the active pane
   const getColor = () => {
     if (isOpen) {
-      return isActivePane ? '#4ade80' : '#22c55e'; // Brighter green for active
+      return isActivePane ? '#4ade80' : 'var(--rah-accent-green)'; // Brighter green for active
     }
-    return isHovered ? '#aaa' : '#666';
+    return isHovered ? 'var(--rah-text-secondary)' : 'var(--rah-text-muted)';
   };
 
   return (
@@ -115,7 +120,7 @@ function PaneTypeButton({ icon: Icon, label, paneType: _paneType, isOpen, isActi
         height: '36px',
         borderRadius: '8px',
         border: 'none',
-        background: isOpen ? '#1a1a1a' : (isHovered ? '#151515' : 'transparent'),
+        background: isOpen ? 'var(--rah-bg-active)' : (isHovered ? 'var(--rah-bg-hover)' : 'transparent'),
         color: getColor(),
         cursor: 'pointer',
         display: 'flex',
@@ -154,6 +159,8 @@ export default function LeftToolbar({
   activePane,
   slotAType,
   slotBType,
+  theme,
+  onThemeToggle,
 }: LeftToolbarProps) {
   // Determine which pane types are currently open
   const openPaneTypes = new Set<PaneType>(
@@ -168,10 +175,9 @@ export default function LeftToolbar({
       style={{
         width: '50px',
         height: '100%',
-        background: '#0a0a0a',
+        background: 'var(--rah-bg-base)',
         display: 'flex',
         flexDirection: 'column',
-        justifyContent: 'space-between',
         padding: '12px 0',
         flexShrink: 0,
       }}
@@ -200,11 +206,14 @@ export default function LeftToolbar({
       {/* Middle section - Pane Types */}
       <div
         style={{
+          flex: 1,
           display: 'flex',
           flexDirection: 'column',
+          justifyContent: 'center',
           alignItems: 'center',
           gap: '4px',
-          padding: '8px 0',
+          padding: '14px 0 8px',
+          borderTop: '1px solid var(--rah-border)',
         }}
       >
         {TOOLBAR_PANE_TYPES.map((paneType) => {
@@ -236,6 +245,11 @@ export default function LeftToolbar({
           isOpen={openPaneTypes.has('skills')}
           isActivePane={activePaneType === 'skills'}
           onClick={() => onPaneTypeClick('skills')}
+        />
+        <ToolbarButton
+          icon={theme === 'dark' ? Sun : Moon}
+          label={theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+          onClick={onThemeToggle}
         />
         <ToolbarButton
           icon={Settings}

@@ -4,8 +4,67 @@ import { nodeService } from '@/services/database/nodes';
 import { formatNodeForChat } from '../infrastructure/nodeFormatter';
 import type { Node } from '@/types/database';
 
+type QueryNodeFilters = {
+  dimensions?: string[];
+  search?: string;
+  limit?: number;
+  createdAfter?: string;
+  createdBefore?: string;
+  eventAfter?: string;
+  eventBefore?: string;
+};
+
+function extractSearchTerms(query: string): string[] {
+  const stopWords = new Set(['a', 'an', 'and', 'for', 'from', 'in', 'of', 'on', 'or', 'recent', 'the', 'to', 'with']);
+
+  const rawTerms = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, ' ')
+    .split(/\s+/)
+    .map(term => term.trim())
+    .filter(Boolean);
+
+  const terms = new Set<string>();
+  for (const term of rawTerms) {
+    if (!stopWords.has(term) && term.length >= 3) {
+      terms.add(term);
+    }
+    const alphaParts = term.replace(/\d+/g, ' ').split(/\s+/).filter(Boolean);
+    for (const part of alphaParts) {
+      if (!stopWords.has(part) && part.length >= 3) {
+        terms.add(part);
+      }
+    }
+  }
+
+  return Array.from(terms).slice(0, 8);
+}
+
+function scoreNodeForSearch(node: Node, searchTerm: string): number {
+  const normalizedSearch = searchTerm.toLowerCase();
+  const title = (node.title || '').toLowerCase();
+  const description = (node.description || '').toLowerCase();
+  const notes = (node.notes || '').toLowerCase();
+  const terms = extractSearchTerms(searchTerm);
+
+  let score = 0;
+
+  if (title === normalizedSearch) score += 100;
+  if (title.includes(normalizedSearch)) score += 40;
+  if (description.includes(normalizedSearch)) score += 20;
+  if (notes.includes(normalizedSearch)) score += 10;
+
+  for (const term of terms) {
+    if (title.includes(term)) score += 8;
+    if (description.includes(term)) score += 3;
+    if (notes.includes(term)) score += 2;
+  }
+
+  return score;
+}
+
 export const queryNodesTool = tool({
-  description: 'Search nodes across title, description, notes, and dimensions. Multi-word queries use FTS/tokenized fallback, and agent calls can add node-vector retrieval.',
+  description: 'Search nodes across title, description, and notes. For free-text lookups, search the graph broadly and prioritize title/description matches. Do not use dimensions to constrain keyword search unless the user is explicitly asking about a known dimension.',
   inputSchema: z.object({
     filters: z.object({
       dimensions: z.array(z.string()).describe('Filter by dimensions (e.g., ["research", "ai", "technology"]). Replaces old type/stage filtering.').optional(),
@@ -17,7 +76,7 @@ export const queryNodesTool = tool({
       eventBefore: z.string().optional().describe('ISO date (YYYY-MM-DD). Only return nodes with event_date before this date.'),
     }).optional()
   }),
-  execute: async ({ filters = {} }) => {
+  execute: async ({ filters = {} }: { filters?: QueryNodeFilters }) => {
     console.log('🔍 QueryNodes tool called with filters:', JSON.stringify(filters, null, 2));
     try {
       const limit = filters.limit || 10;
@@ -63,27 +122,41 @@ export const queryNodesTool = tool({
         };
       }
 
-      // Add timeout to prevent hanging
-      const timeoutPromise: Promise<Node[] | undefined> = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('QueryNodes timeout after 10 seconds')), 10000);
-      });
+      const runQuery = async (queryFilters: typeof filters): Promise<Node[]> => {
+        const timeoutPromise: Promise<Node[] | undefined> = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('QueryNodes timeout after 10 seconds')), 10000);
+        });
 
-      // Use new nodeService with dimension-based filtering
-      const nodesPromise: Promise<Node[] | undefined> = nodeService.getNodes({
-        limit,
-        dimensions: filters.dimensions,
-        search: filters.search,
-        searchMode: searchTerm ? 'hybrid' : 'standard',
-        createdAfter: filters.createdAfter,
-        createdBefore: filters.createdBefore,
-        eventAfter: filters.eventAfter,
-        eventBefore: filters.eventBefore,
-      });
+        const nodesPromise: Promise<Node[] | undefined> = nodeService.getNodes({
+          limit,
+          dimensions: queryFilters.dimensions,
+          search: queryFilters.search,
+          searchMode: searchTerm ? 'hybrid' : 'standard',
+          createdAfter: queryFilters.createdAfter,
+          createdBefore: queryFilters.createdBefore,
+          eventAfter: queryFilters.eventAfter,
+          eventBefore: queryFilters.eventBefore,
+        });
 
-      const nodes = await Promise.race<Node[] | undefined>([nodesPromise, timeoutPromise]);
+        const nodes = await Promise.race<Node[] | undefined>([nodesPromise, timeoutPromise]);
+        return Array.isArray(nodes) ? nodes : [];
+      };
 
-      // Handle the case where nodes might be undefined/null
-      const safeNodes: Node[] = Array.isArray(nodes) ? nodes : [];
+      const hasExplicitDimensionFilter = Array.isArray(filters.dimensions) && filters.dimensions.length > 0;
+      const effectiveFilters = searchTerm && !hasExplicitDimensionFilter
+        ? { ...filters, dimensions: undefined }
+        : { ...filters };
+
+      let safeNodes = await runQuery(effectiveFilters);
+
+      if (searchTerm) {
+        safeNodes = safeNodes
+          .map(node => ({ node, score: scoreNodeForSearch(node, searchTerm) }))
+          .sort((a, b) => b.score - a.score || b.node.updated_at.localeCompare(a.node.updated_at))
+          .slice(0, limit)
+          .map(entry => entry.node);
+      }
+
       const limitedNodes = safeNodes.slice(0, limit);
 
       // Format nodes for chat display
@@ -106,14 +179,14 @@ export const queryNodesTool = tool({
 
       // Create message with formatted node labels only (no full node payload)
       const formattedLabels = formattedNodes.map(node => node.formatted_display).join(', ');
-      const message = `Found ${safeNodes.length} nodes${filters.dimensions ? ` with dimensions: ${filters.dimensions.join(', ')}` : ''}${filters.search ? ` matching: "${filters.search}"` : ''}${formattedLabels ? `:\n${formattedLabels}` : ''}`;
+      const message = `Found ${safeNodes.length} nodes${effectiveFilters.dimensions ? ` with dimensions: ${effectiveFilters.dimensions.join(', ')}` : ''}${effectiveFilters.search ? ` matching: "${effectiveFilters.search}"` : ''}${formattedLabels ? `:\n${formattedLabels}` : ''}`;
 
       return {
         success: true,
         data: {
           nodes: formattedNodes,
           count: safeNodes.length,
-          filters_applied: filters
+          filters_applied: effectiveFilters
         },
         message: message
       };

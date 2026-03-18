@@ -32,6 +32,7 @@ Browse and manage your knowledge base.
 - **Dimension filters** — Multi-select dimension tags
 - **Node list** — Scrollable list of filtered nodes
 - **Folder view toggle** — Switch between list and folder views
+- **Theme toggle** — Light/dark mode switch in the left toolbar
 
 ### Node Display
 

@@ -95,13 +95,13 @@ export default function SplitHandle({
         onMouseDown={handleMouseDown}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
-        style={{
-          width: '12px',
-          cursor: 'col-resize',
-          background: isHovered ? '#1a1a1a' : 'transparent',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+      style={{
+        width: '12px',
+        cursor: 'col-resize',
+        background: isHovered ? 'var(--rah-bg-active)' : 'transparent',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
           transition: 'background 0.15s ease',
           flexShrink: 0,
         }}
@@ -125,7 +125,7 @@ export default function SplitHandle({
       style={{
         width: '8px',
         cursor: 'col-resize',
-        background: isDragging ? '#22c55e' : (isHovered ? '#1a1a1a' : 'transparent'),
+        background: isDragging ? '#22c55e' : (isHovered ? 'var(--rah-bg-active)' : 'transparent'),
         transition: isDragging ? 'none' : 'background 0.15s ease',
         flexShrink: 0,
       }}

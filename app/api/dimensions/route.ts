@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    const descriptionError = validateDimensionDescription(description || '');
+    const descriptionError = description !== null
+      ? validateDimensionDescription(description)
+      : null;
     if (descriptionError) {
       return NextResponse.json({
         success: false,

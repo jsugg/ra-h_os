@@ -26,20 +26,20 @@ export default function SkillCard({
   return (
     <div
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = '#1a1a1a';
-        e.currentTarget.style.borderColor = '#383838';
+        e.currentTarget.style.background = 'var(--rah-bg-active)';
+        e.currentTarget.style.borderColor = 'var(--rah-border-strong)';
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = '#161616';
-        e.currentTarget.style.borderColor = '#222';
+        e.currentTarget.style.background = 'var(--rah-bg-elevated)';
+        e.currentTarget.style.borderColor = 'var(--rah-border-strong)';
       }}
       style={{
         display: 'flex',
         alignItems: 'center',
         gap: '10px',
         padding: '10px',
-        background: '#161616',
-        border: '1px solid #222',
+        background: 'var(--rah-bg-elevated)',
+        border: '1px solid var(--rah-border-strong)',
         borderRadius: '8px',
       }}
     >
@@ -56,10 +56,10 @@ export default function SkillCard({
           padding: 0,
         }}
       >
-        <span style={{ color: '#ddd', fontSize: '13px', fontWeight: 500, display: 'block' }}>{skill.name}</span>
+        <span style={{ color: 'var(--rah-text-base)', fontSize: '13px', fontWeight: 500, display: 'block' }}>{skill.name}</span>
         <span
           style={{
-            color: '#777',
+            color: 'var(--rah-text-muted)',
             fontSize: '12px',
             lineHeight: '1.4',
             display: 'block',

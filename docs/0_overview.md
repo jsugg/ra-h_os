@@ -71,7 +71,7 @@ RA-OS is designed to be the knowledge backend for your AI workflows:
 
 Add this to `~/.claude.json` and restart Claude. Works without RA-OS running.
 
-Core tools include: `createNode`, `queryNodes`, `updateNode`, `getNodesById`, `createEdge`, `queryEdge`, `queryDimensions`, `createDimension`, `updateDimension`, `deleteDimension`, `listSkills`, `readSkill`
+Core tools include: `createNode`, `queryNodes`, `updateNode`, `deleteNode`, `getNodesById`, `createEdge`, `queryEdge`, `queryDimensions`, `createDimension`, `updateDimension`, `deleteDimension`, `listSkills`, `readSkill`
 
 ## Documentation
 

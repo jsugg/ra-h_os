@@ -19,6 +19,7 @@ RA-OS exposes these core standalone MCP tools:
 | `getNodesById` | Fetch full nodes by ID |
 | `createNode` | Create a node |
 | `updateNode` | Update a node |
+| `deleteNode` | Delete a node by ID |
 | `createEdge` | Create an edge between nodes |
 | `queryEdge` | Query edges |
 | `updateEdge` | Update edge explanation |

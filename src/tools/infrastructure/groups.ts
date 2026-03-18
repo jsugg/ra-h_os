@@ -49,6 +49,7 @@ export const TOOL_GROUP_ASSIGNMENTS: Record<string, string> = {
   // Execution: Write operations and extraction (workers only)
   createNode: 'execution',
   updateNode: 'execution',
+  deleteNode: 'execution',
   createEdge: 'execution',
   updateEdge: 'execution',
   embedContent: 'execution',

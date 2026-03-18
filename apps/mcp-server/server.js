@@ -112,7 +112,7 @@ const searchNodesOutputSchema = {
     z.object({
       id: z.number(),
       title: z.string(),
-      content: z.string().nullable(),
+      notes: z.string().nullable(),
       description: z.string().nullable(),
       link: z.string().nullable(),
       dimensions: z.array(z.string()),
@@ -151,7 +151,7 @@ const getNodesOutputSchema = {
     z.object({
       id: z.number(),
       title: z.string(),
-      content: z.string().nullable(),
+      notes: z.string().nullable(),
       link: z.string().nullable(),
       dimensions: z.array(z.string()),
       updated_at: z.string()
@@ -825,7 +825,7 @@ mcpServer.registerTool(
     description: 'Get orientation context: hub nodes, dimensions, stats, and available guides. Call this first.',
     inputSchema: {},
     outputSchema: {
-      schema: z.object({ nodeCount: z.number(), edgeCount: z.number(), dimensionCount: z.number() }),
+      stats: z.object({ nodeCount: z.number(), edgeCount: z.number(), dimensionCount: z.number() }),
       hubNodes: z.array(z.object({ id: z.number(), title: z.string(), description: z.string().nullable(), edgeCount: z.number() })),
       dimensions: z.array(z.object({ name: z.string(), nodeCount: z.number(), description: z.string().nullable() })),
       guides: z.array(z.string())
@@ -853,7 +853,7 @@ mcpServer.registerTool(
 
     return {
       content: [{ type: 'text', text: `Knowledge graph: ${stats.dimensionCount} dimensions, ${hubNodes.length} hub nodes. ${guides.length} guides available.` }],
-      structuredContent: { schema: stats, hubNodes, dimensions, guides }
+      structuredContent: { stats, hubNodes, dimensions, guides }
     };
   }
 );
