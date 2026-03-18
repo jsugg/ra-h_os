@@ -33,11 +33,15 @@ const nodeService = require('./services/nodeService');
 const edgeService = require('./services/edgeService');
 const dimensionService = require('./services/dimensionService');
 const skillService = require('./services/skillService');
+const historyService = require('./services/historyService');
+const healthService = require('./services/healthService');
+const sessionService = require('./services/sessionService');
+const importanceService = require('./services/importanceService');
 
 // Server info
 const serverInfo = {
   name: 'ra-h-standalone',
-  version: '1.8.0'
+  version: '2.0.0'
 };
 
 function buildInstructions() {
@@ -82,7 +86,10 @@ const addNodeInputSchema = {
   description: z.string().min(24).max(280).describe('REQUIRED. One-sentence summary: WHAT this is (explicit, concrete) + WHY it matters. No weak verbs (discusses, explores, examines). Example: "Podcast — Lex Fridman interviews Sam Altman on AGI timelines. First public comments since board drama."'),
   dimensions: z.array(z.string()).min(1).max(5).describe('1-5 categories. Call queryDimensions first to use existing ones.'),
   metadata: z.record(z.any()).optional().describe('Additional metadata'),
-  chunk: z.string().max(50000).optional().describe('Full source text')
+  chunk: z.string().max(50000).optional().describe('Full source text'),
+  status: z.enum(['active', 'draft', 'deprecated', 'superseded', 'uncertain']).optional().describe('Lifecycle state. Default: "draft" for LLM writes, "active" for user-confirmed writes.'),
+  confidence: z.enum(['high', 'medium', 'low']).optional().describe('Certainty about this write. Default: "medium".'),
+  created_via: z.enum(['user', 'llm_auto', 'llm_confirmed']).optional().describe('Write origin. Default: "llm_auto".')
 };
 
 const searchNodesInputSchema = {
@@ -103,11 +110,13 @@ const updateNodeInputSchema = {
   id: z.number().int().positive().describe('Node ID'),
   updates: z.object({
     title: z.string().optional().describe('New title'),
-    description: z.string().min(24).max(280).describe('REQUIRED. Explicitly state WHAT this is (podcast, conversation summary, user insight, etc.) + WHY it matters for context grounding. No vague verbs like "discusses/explores/examines".'),
+    description: z.string().min(24).max(280).optional().describe('Updated description. Explicitly state WHAT this is + WHY it matters. No weak verbs. Triggers conflict detection if substantially different from existing.'),
     content: z.string().optional().describe('Content to APPEND'),
     link: z.string().optional().describe('New link'),
     dimensions: z.array(z.string()).optional().describe('New dimensions (replaces existing)'),
-    metadata: z.record(z.any()).optional().describe('New metadata')
+    metadata: z.record(z.any()).optional().describe('New metadata'),
+    status: z.enum(['active', 'draft', 'deprecated', 'superseded', 'uncertain']).optional().describe('New lifecycle status.'),
+    confidence: z.enum(['high', 'medium', 'low']).optional().describe('Updated confidence level.')
   }).describe('Fields to update')
 };
 
@@ -168,6 +177,37 @@ const searchContentInputSchema = {
 const sqliteQueryInputSchema = {
   sql: z.string().min(1).describe('The SQL query to execute. Must be a SELECT, WITH, or PRAGMA statement.'),
   format: z.enum(['json', 'table']).optional().describe('Output format (default json)')
+};
+
+// New tool schemas (v2)
+
+const getNodeHistoryInputSchema = {
+  nodeId: z.number().int().positive().describe('Node ID to retrieve history for')
+};
+
+const promoteNodeInputSchema = {
+  id: z.number().int().positive().describe('Node ID'),
+  status: z.enum(['active', 'draft', 'deprecated', 'superseded', 'uncertain']).describe('Target lifecycle status'),
+  changed_by: z.enum(['user', 'llm_auto', 'llm_confirmed']).optional().describe('Who is making this change. Use "user" for explicit user requests.')
+};
+
+const createSessionSummaryInputSchema = {
+  summary: z.string().min(10).max(2000).describe('Summary of what was discussed and captured this session'),
+  title: z.string().min(1).max(160).optional().describe('Node title. Defaults to "Session Summary — [date]"'),
+  dimensions: z.array(z.string()).min(1).max(5).optional().describe('Dimensions to assign. Defaults to ["memory"]')
+};
+
+const findOrphansInputSchema = {
+  limit: z.number().min(1).max(100).optional().describe('Max orphan nodes to return (default 50)')
+};
+
+const findCoverageGapsInputSchema = {
+  limit: z.number().min(1).max(20).optional().describe('Max gap candidates to return (default 10)')
+};
+
+const queryDraftInputSchema = {
+  status: z.enum(['draft', 'uncertain']).optional().describe('Filter by specific unconfirmed status. Omit to return both draft and uncertain.'),
+  limit: z.number().min(1).max(100).optional().describe('Max results (default 50)')
 };
 
 // Helper to sanitize dimensions
@@ -287,7 +327,7 @@ function log(...args) {
 }
 
 async function main() {
-  // Initialize database
+  // Initialize database (runs all pending migrations)
   try {
     initDatabase();
     log('Database connected:', getDatabasePath());
@@ -296,6 +336,10 @@ async function main() {
     log('ERROR:', error.message);
     process.exit(1);
   }
+
+  // Start session for this process lifetime
+  const sessionId = sessionService.startSession();
+  log('Session started:', sessionId);
 
   const instructions = buildInstructions();
   const server = new McpServer(serverInfo, { instructions });
@@ -331,7 +375,13 @@ async function main() {
         };
       }
 
-      const summary = `Graph: ${context.stats.nodeCount} nodes, ${context.stats.edgeCount} edges, ${context.stats.dimensionCount} dimensions, ${skills.length} skills.`;
+      const { healthSignals } = context;
+      const healthParts = [];
+      if (healthSignals.draftCount > 0) healthParts.push(`${healthSignals.draftCount} draft/uncertain nodes`);
+      if (healthSignals.orphanCount > 0) healthParts.push(`${healthSignals.orphanCount} orphans`);
+      const healthNote = healthParts.length > 0 ? ` ⚠ ${healthParts.join(', ')} — run getHealth for details.` : '';
+
+      const summary = `Graph: ${context.stats.nodeCount} nodes, ${context.stats.edgeCount} edges, ${context.stats.dimensionCount} dimensions, ${skills.length} skills.${healthNote}`;
       return {
         content: [{ type: 'text', text: summary }],
         structuredContent: context
@@ -349,7 +399,7 @@ async function main() {
       // Note: MCP schema uses "content" for external API compat; mapped to "notes" internally
       inputSchema: addNodeInputSchema
     },
-    async ({ title, content, link, description, dimensions, metadata, chunk }) => {
+    async ({ title, content, link, description, dimensions, metadata, chunk, status, confidence, created_via }) => {
       const normalizedDimensions = sanitizeDimensions(dimensions);
       if (normalizedDimensions.length === 0) {
         throw new Error('At least one dimension is required.');
@@ -366,10 +416,13 @@ async function main() {
         description: description?.trim(),
         dimensions: normalizedDimensions,
         metadata: metadata || {},
-        chunk: chunk?.trim()
+        chunk: chunk?.trim(),
+        status,
+        confidence,
+        created_via,
       });
 
-      const summary = `Created node #${node.id}: ${node.title} [${node.dimensions.join(', ')}]`;
+      const summary = `Created node #${node.id}: ${node.title} [${node.dimensions.join(', ')}] (status: ${node.status})`;
 
       return {
         content: [{ type: 'text', text: summary }],
@@ -377,6 +430,8 @@ async function main() {
           nodeId: node.id,
           title: node.title,
           dimensions: node.dimensions,
+          status: node.status,
+          confidence: node.confidence,
           message: summary
         }
       };
@@ -597,12 +652,11 @@ async function main() {
       if (!updates || Object.keys(updates).length === 0) {
         throw new Error('At least one field must be provided in updates.');
       }
-      if (!updates.description) {
-        throw new Error('Every node update requires an explicit description (WHAT this is + WHY it matters).');
-      }
-      const descriptionError = validateExplicitDescription(updates.description);
-      if (descriptionError) {
-        throw new Error(descriptionError);
+      if (updates.description) {
+        const descriptionError = validateExplicitDescription(updates.description);
+        if (descriptionError) {
+          throw new Error(descriptionError);
+        }
       }
 
       // Map MCP 'content' field → internal 'notes' field
@@ -612,14 +666,23 @@ async function main() {
         delete mappedUpdates.content;
       }
 
-      const node = nodeService.updateNode(id, mappedUpdates, { appendNotes: true });
+      const result = nodeService.updateNode(id, mappedUpdates, { appendNotes: true });
+      const { node, changed_fields, conflict_detected } = result;
+
+      const conflictNote = conflict_detected
+        ? ' ⚠ Description conflict detected — node status set to "uncertain". Review with promoteNode.'
+        : '';
+      const summary = `Updated node #${id} (${changed_fields.length} field(s) changed).${conflictNote}`;
 
       return {
-        content: [{ type: 'text', text: `Updated node #${id}` }],
+        content: [{ type: 'text', text: summary }],
         structuredContent: {
           success: true,
           nodeId: node.id,
-          message: `Updated node #${id}`
+          changed_fields,
+          conflict_detected,
+          status: node.status,
+          message: summary
         }
       };
     }
@@ -1048,23 +1111,284 @@ async function main() {
     }
   );
 
+  // ========== HEALTH TOOL ==========
+
+  registerToolWithAliases(
+    'getHealth',
+    {
+      title: 'Get RA-H graph health',
+      description: 'Compute the full graph health report: orphan %, draft/uncertain node %, vague description %, dimension skew, avg edges per node, skill recency. Returns a composite score (0–100), letter grade, per-metric status, and prioritised recommendations.',
+      inputSchema: {}
+    },
+    async () => {
+      const report = healthService.getHealthMetrics();
+      const summary = `Health score: ${report.score}/100 (${report.grade}). ${report.recommendations[0] || ''}`;
+
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: report
+      };
+    }
+  );
+
+  // ========== NODE HISTORY TOOL ==========
+
+  registerToolWithAliases(
+    'getNodeHistory',
+    {
+      title: 'Get RA-H node history',
+      description: 'Return the append-only change history for a node. Shows every field-level mutation in chronological order: what changed, what it was before, when it changed, and which session made the change. Useful for auditing LLM drift, rolling back bad updates, or understanding node evolution.',
+      inputSchema: getNodeHistoryInputSchema
+    },
+    async ({ nodeId }) => {
+      const history = historyService.getHistory(nodeId);
+
+      if (history.length === 0) {
+        return {
+          content: [{ type: 'text', text: `No history recorded for node #${nodeId} yet.` }],
+          structuredContent: { nodeId, count: 0, history: [] }
+        };
+      }
+
+      const summary = `${history.length} change(s) recorded for node #${nodeId}.`;
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: { nodeId, count: history.length, history }
+      };
+    }
+  );
+
+  // ========== PROMOTE NODE TOOL ==========
+
+  registerToolWithAliases(
+    'promoteNode',
+    {
+      title: 'Promote RA-H node status',
+      description: 'Transition a node lifecycle status. Valid transitions: draft→active (user confirmed), active→deprecated (outdated), active→superseded (replaced by newer node), uncertain→active (conflict resolved), uncertain→deprecated (conflict resolved by removing). All transitions are recorded in node history.',
+      inputSchema: promoteNodeInputSchema
+    },
+    async ({ id, status, changed_by = 'llm_auto' }) => {
+      const node = nodeService.promoteNode(id, status, changed_by);
+      const summary = `Node #${id} status set to "${status}".`;
+
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: {
+          nodeId: node.id,
+          title: node.title,
+          status: node.status,
+          message: summary
+        }
+      };
+    }
+  );
+
+  // ========== QUERY DRAFT TOOL ==========
+
+  registerToolWithAliases(
+    'queryDraft',
+    {
+      title: 'Query RA-H draft/uncertain nodes',
+      description: 'List all nodes in draft or uncertain state that require user review. Draft nodes are LLM-created and not yet confirmed. Uncertain nodes had a description conflict detected. Use promoteNode to graduate them to active, or deprecate them.',
+      inputSchema: queryDraftInputSchema
+    },
+    async ({ status, limit = 50 }) => {
+      // When no status filter given, fetch both draft and uncertain in a single
+      // query (via the array-status support added to nodeService.getNodes).
+      const allRows = nodeService.getNodes({
+        status: status || ['draft', 'uncertain'],
+        limit,
+      });
+
+      const summary = `${allRows.length} unconfirmed node(s) pending review.`;
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: {
+          count: allRows.length,
+          nodes: allRows.map((n) => ({
+            id: n.id,
+            title: n.title,
+            status: n.status,
+            confidence: n.confidence,
+            created_at: n.created_at,
+            dimensions: n.dimensions,
+          }))
+        }
+      };
+    }
+  );
+
+  // ========== FIND ORPHANS TOOL ==========
+
+  registerToolWithAliases(
+    'findOrphans',
+    {
+      title: 'Find RA-H orphan nodes',
+      description: 'Return all nodes with zero edges — they cannot be reached through graph traversal and represent coverage gaps or candidates for deletion. High orphan % is a critical health signal. Use createEdge to connect them or promoteNode to deprecate them.',
+      inputSchema: findOrphansInputSchema
+    },
+    async ({ limit = 50 }) => {
+      const orphans = importanceService.getOrphanNodes(limit);
+      const summary = `${orphans.length} orphan node(s) found (no edges).`;
+
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: { count: orphans.length, orphans }
+      };
+    }
+  );
+
+  // ========== FIND COVERAGE GAPS TOOL ==========
+
+  registerToolWithAliases(
+    'findCoverageGaps',
+    {
+      title: 'Find RA-H coverage gaps',
+      description: 'Analyse session summary nodes to surface topics that appear repeatedly but have no dedicated graph node. Returns candidate topics for node creation. Run during Calibration to ensure recurring themes are captured.',
+      inputSchema: findCoverageGapsInputSchema
+    },
+    async ({ limit = 10 }) => {
+      // Mine session summaries for recurring uncaptured topics.
+      // Strategy: get recent session summary nodes, extract common terms,
+      // cross-reference against existing node titles/descriptions.
+      const sessionSummaries = nodeService.getNodes({
+        search: 'Session Summary',
+        limit: 20,
+      });
+
+      if (sessionSummaries.length === 0) {
+        return {
+          content: [{ type: 'text', text: 'No session summary nodes found. Use createSessionSummary at end of sessions to enable coverage gap analysis.' }],
+          structuredContent: { count: 0, gaps: [], recommendation: 'Create session summary nodes regularly to enable this analysis.' }
+        };
+      }
+
+      // Count term frequency across session summaries
+      const termCounts = new Map();
+      const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to',
+        'for', 'of', 'with', 'by', 'from', 'is', 'was', 'are', 'were', 'be', 'been',
+        'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should',
+        'this', 'that', 'these', 'those', 'i', 'we', 'you', 'he', 'she', 'it', 'they',
+        'session', 'summary', 'discussed', 'covered', 'mentioned', 'node', 'nodes']);
+
+      for (const node of sessionSummaries) {
+        const text = [node.title, node.description, node.notes].filter(Boolean).join(' ');
+        const terms = text.toLowerCase()
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .split(/\s+/)
+          .filter((t) => t.length > 3 && !stopWords.has(t));
+
+        for (const term of terms) {
+          termCounts.set(term, (termCounts.get(term) || 0) + 1);
+        }
+      }
+
+      // Candidates: terms appearing in >= 2 sessions
+      const candidates = [...termCounts.entries()]
+        .filter(([, count]) => count >= 2)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, limit * 3)
+        .map(([term]) => term);
+
+      // Cross-reference: which candidates have no matching node?
+      const gaps = [];
+      for (const term of candidates) {
+        const existing = nodeService.getNodes({ search: term, limit: 1 });
+        if (existing.length === 0) {
+          gaps.push({ term, session_count: termCounts.get(term) });
+        }
+        if (gaps.length >= limit) break;
+      }
+
+      const summary = gaps.length > 0
+        ? `${gaps.length} coverage gap(s) found — topics mentioned across sessions but not captured as nodes.`
+        : 'No obvious coverage gaps found. Graph appears well-captured relative to session summaries.';
+
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: { count: gaps.length, gaps }
+      };
+    }
+  );
+
+  // ========== CREATE SESSION SUMMARY TOOL ==========
+
+  registerToolWithAliases(
+    'createSessionSummary',
+    {
+      title: 'Create RA-H session summary',
+      description: 'Create a lightweight summary node for the current session. Captures what was discussed and saved so future coverage gap analysis has data to mine. Call at end of session or when context suggests a natural break. Automatically linked to the current session ID.',
+      inputSchema: createSessionSummaryInputSchema
+    },
+    async ({ summary, title, dimensions }) => {
+      const now = new Date().toISOString().split('T')[0];
+      const nodeTitle = title || `Session Summary — ${now}`;
+      const nodeDimensions = dimensions && dimensions.length > 0 ? dimensions : ['memory'];
+
+      const node = nodeService.createNode({
+        title: nodeTitle,
+        description: summary.slice(0, 280),
+        notes: summary,
+        dimensions: nodeDimensions,
+        status: 'active',
+        confidence: 'high',
+        created_via: 'llm_confirmed',
+      });
+
+      // Also update the session record with this summary
+      const sessionId = sessionService.getCurrentSessionId();
+      sessionService.updateSessionSummary(sessionId, summary);
+
+      const msg = `Session summary node #${node.id} created.`;
+      return {
+        content: [{ type: 'text', text: msg }],
+        structuredContent: {
+          nodeId: node.id,
+          title: node.title,
+          sessionId,
+          message: msg
+        }
+      };
+    }
+  );
+
+  // ========== COMPUTE IMPORTANCE TOOL ==========
+
+  registerToolWithAliases(
+    'computeImportance',
+    {
+      title: 'Compute RA-H importance scores',
+      description: 'Recompute PageRank-style importance scores for all nodes based on edge connectivity. Scores are persisted to nodes.importance_score. Run after bulk writes or at Calibration time. Returns convergence stats.',
+      inputSchema: {}
+    },
+    async () => {
+      const result = importanceService.computeImportanceScores();
+      const summary = `Importance computed: ${result.nodesUpdated} nodes, ${result.iterations} iterations, converged: ${result.converged}.`;
+
+      return {
+        content: [{ type: 'text', text: summary }],
+        structuredContent: result
+      };
+    }
+  );
+
   // Connect transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
   log('MCP server ready');
 
   // Handle graceful shutdown
-  process.on('SIGINT', () => {
+  const shutdown = () => {
     log('Shutting down...');
+    try {
+      sessionService.endCurrentSession();
+    } catch (_) { /* non-fatal */ }
     closeDatabase();
     process.exit(0);
-  });
+  };
 
-  process.on('SIGTERM', () => {
-    log('Shutting down...');
-    closeDatabase();
-    process.exit(0);
-  });
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
 }
 
 main().catch((error) => {

@@ -86,9 +86,6 @@ export default function ThreePanelLayout() {
   // Track selected nodes (for context)
   const [selectedNodes, setSelectedNodes] = useState<Set<number>>(new Set<number>());
 
-  // Open tabs data (full node objects for context)
-  const [openTabsData, setOpenTabsData] = useState<Node[]>([]);
-
   // Event handlers for SSE events
   const [nodesPanelRefresh, setNodesPanelRefresh] = useState(0);
   const [focusPanelRefresh, setFocusPanelRefresh] = useState(0);
@@ -139,50 +136,10 @@ export default function ThreePanelLayout() {
     return { openTabs: [], activeTab: null };
   }, [slotA, slotB]);
 
-  // Fetch full node data for open tabs
-  const fetchOpenTabsData = async (tabIds: number[]) => {
-    if (tabIds.length === 0) {
-      setOpenTabsData([]);
-      return;
-    }
-
-    try {
-      const nodePromises = tabIds.map(async (id) => {
-        const response = await fetch(`/api/nodes/${id}`);
-        if (response.ok) {
-          const data = await response.json();
-          return data.node as Node;
-        }
-        return null;
-      });
-
-      const nodes = await Promise.all(nodePromises);
-      const validNodes = nodes.filter((node): node is Node => Boolean(node)).map(node => ({
-        id: node.id,
-        title: node.title,
-        link: node.link,
-        notes: node.notes,
-        dimensions: node.dimensions,
-        created_at: node.created_at,
-        updated_at: node.updated_at,
-        chunk_status: node.chunk_status,
-        chunk: node.chunk,
-        metadata: node.metadata,
-      }));
-      setOpenTabsData(validNodes);
-    } catch (error) {
-      console.error('Failed to fetch tab data:', error);
-      setOpenTabsData([]);
-    }
-  };
-
-  // Update tab data whenever openTabs changes or focus panel refreshes (use string key to prevent infinite loops)
-  const openTabsKey = openTabs.join(',');
+  // Keep the latest tab set available to the SSE handler without triggering extra fetches.
   useEffect(() => {
     openTabsRef.current = openTabs;
-    fetchOpenTabsData(openTabs);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openTabsKey, focusPanelRefresh]);
+  }, [openTabs]);
 
   // Delegations loading removed (delegation system removed in rah-light)
 

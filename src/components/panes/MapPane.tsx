@@ -17,7 +17,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 
-import type { Edge as DbEdge, Node as DbNode } from '@/types/database';
+import type { Edge as DbEdge, Node as DbNode, NodeConnection } from '@/types/database';
 import PaneHeader from './PaneHeader';
 import type { MapPaneProps } from './types';
 import { ChevronDown } from 'lucide-react';
@@ -209,11 +209,13 @@ function MapPaneInner({
   const fetchConnectedNodes = useCallback(async (nodeId: number) => {
     try {
       const edgesRes = await fetch(`/api/nodes/${nodeId}/edges`);
-      let nodeEdges: DbEdge[] = [];
+      let connections: NodeConnection[] = [];
 
       if (edgesRes.ok) {
         const edgesData = await edgesRes.json();
-        nodeEdges = edgesData.data || [];
+        connections = Array.isArray(edgesData.data) ? edgesData.data : [];
+
+        const nodeEdges = connections.map(connection => connection.edge);
 
         if (nodeEdges.length > 0) {
           setDbEdges(prev => {
@@ -222,49 +224,23 @@ function MapPaneInner({
             return fresh.length > 0 ? [...prev, ...fresh] : prev;
           });
         }
-      }
 
-      // Find missing connected node IDs
-      const connectedIds = new Set<number>();
-      dbEdges.forEach(e => {
-        if (e.from_node_id === nodeId) connectedIds.add(e.to_node_id);
-        if (e.to_node_id === nodeId) connectedIds.add(e.from_node_id);
-      });
-      nodeEdges.forEach(e => {
-        if (e.from_node_id === nodeId) connectedIds.add(e.to_node_id);
-        if (e.to_node_id === nodeId) connectedIds.add(e.from_node_id);
-      });
+        const connectedNodes = connections
+          .map(connection => connection.connected_node)
+          .filter((connectedNode): connectedNode is DbNode => Boolean(connectedNode?.id));
 
-      const existingIds = new Set(allDbNodes.map(n => n.id));
-      const missingIds = Array.from(connectedIds).filter(id => !existingIds.has(id));
-      if (missingIds.length === 0) return;
-
-      const fetched = (
-        await Promise.all(
-          missingIds.slice(0, 50).map(async id => {
-            try {
-              const res = await fetch(`/api/nodes/${id}`);
-              if (res.ok) {
-                const data = await res.json();
-                return data.node as DbNode;
-              }
-            } catch { /* ignore */ }
-            return null;
-          }),
-        )
-      ).filter((n): n is DbNode => n !== null);
-
-      if (fetched.length > 0) {
-        setExpandedNodes(prev => {
-          const ids = new Set(prev.map(n => n.id));
-          const fresh = fetched.filter(n => !ids.has(n.id));
-          return fresh.length > 0 ? [...prev, ...fresh] : prev;
-        });
+        if (connectedNodes.length > 0) {
+          setExpandedNodes(prev => {
+            const existingIds = new Set([...baseNodes, ...prev].map(n => n.id));
+            const fresh = connectedNodes.filter(node => !existingIds.has(node.id));
+            return fresh.length > 0 ? [...prev, ...fresh] : prev;
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to fetch connected nodes:', err);
     }
-  }, [dbEdges, allDbNodes]);
+  }, [baseNodes]);
 
   useEffect(() => {
     if (selectedNodeId) fetchConnectedNodes(selectedNodeId);

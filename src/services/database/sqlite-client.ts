@@ -14,6 +14,15 @@ export interface SQLiteQueryResult<T = any> {
   lastInsertRowid?: number;
 }
 
+// Prevent Next.js from re-creating the SQLiteClient across lazy-compiled route module
+// contexts in development. Each API route compilation creates a fresh module context,
+// so module-level statics are undefined in every new context. Storing the instance on
+// globalThis survives HMR module evictions and ensures a single DB connection per process.
+declare global {
+  // eslint-disable-next-line no-var
+  var __rahSqliteClient: SQLiteClient | undefined;
+}
+
 class SQLiteClient {
   private static instance: SQLiteClient;
   private db: Database.Database;
@@ -84,9 +93,18 @@ class SQLiteClient {
   }
 
   public static getInstance(): SQLiteClient {
-    if (!SQLiteClient.instance) {
-      SQLiteClient.instance = new SQLiteClient();
+    // Fast path: same module context already has the instance.
+    if (SQLiteClient.instance) {
+      return SQLiteClient.instance;
     }
+    // Cross-context path: another route's module context already created it.
+    if (globalThis.__rahSqliteClient) {
+      SQLiteClient.instance = globalThis.__rahSqliteClient;
+      return SQLiteClient.instance;
+    }
+    // First ever call in this process: create, persist to globalThis, and cache locally.
+    SQLiteClient.instance = new SQLiteClient();
+    globalThis.__rahSqliteClient = SQLiteClient.instance;
     return SQLiteClient.instance;
   }
 

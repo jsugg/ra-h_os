@@ -5,16 +5,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
+const { runMigrations } = require('../migrations/runner');
+
 /**
- * Get the database path.
- * Priority: RAH_DB_PATH env var > default app data location
+ * Get the database file path.
+ * Priority: RAH_DB_PATH env var > default macOS app-data location.
+ *
+ * @returns {string}
  */
 function getDatabasePath() {
   if (process.env.RAH_DB_PATH) {
     return process.env.RAH_DB_PATH;
   }
 
-  // Default: ~/Library/Application Support/RA-H/db/rah.sqlite
   return path.join(
     os.homedir(),
     'Library',
@@ -25,11 +28,101 @@ function getDatabasePath() {
   );
 }
 
+/** @type {import('better-sqlite3').Database | null} */
 let db = null;
+/** @type {Map<string, import('better-sqlite3').Statement>} */
+let stmtCache = new Map();
+/** @type {NodeJS.Timeout | null} */
+let maintenanceTimer = null;
+let lastOptimizeAt = 0;
+
+const MAX_CACHED_STATEMENTS = 100;
+const MAINTENANCE_INTERVAL_MS = 5 * 60 * 1000;
+const OPTIMIZE_INTERVAL_MS = 60 * 60 * 1000;
+
+function clearStatementCache() {
+  stmtCache.clear();
+}
 
 /**
- * Initialize the database connection.
- * Call this once at startup.
+ * Return a cached prepared statement or prepare and cache it.
+ *
+ * @param {import('better-sqlite3').Database} database
+ * @param {string} sql
+ * @returns {import('better-sqlite3').Statement}
+ */
+function getCachedStatement(database, sql) {
+  const cached = stmtCache.get(sql);
+  if (cached) {
+    stmtCache.delete(sql);
+    stmtCache.set(sql, cached);
+    return cached;
+  }
+
+  const stmt = database.prepare(sql);
+  stmtCache.set(sql, stmt);
+  if (stmtCache.size > MAX_CACHED_STATEMENTS) {
+    const oldestKey = stmtCache.keys().next().value;
+    if (oldestKey) {
+      stmtCache.delete(oldestKey);
+    }
+  }
+  return stmt;
+}
+
+function clearMaintenanceTimer() {
+  if (maintenanceTimer) {
+    clearInterval(maintenanceTimer);
+    maintenanceTimer = null;
+  }
+}
+
+/**
+ * Run lightweight SQLite maintenance to bound WAL growth and refresh planner stats.
+ *
+ * @param {{ checkpointMode?: 'PASSIVE' | 'TRUNCATE'; forceOptimize?: boolean }} [options]
+ */
+function runMaintenance(options = {}) {
+  if (!db) return;
+
+  const { checkpointMode = 'PASSIVE', forceOptimize = false } = options;
+
+  try {
+    db.pragma(`wal_checkpoint(${checkpointMode})`);
+  } catch (error) {
+    console.error(`[RA-H] Warning: WAL checkpoint (${checkpointMode}) failed:`, error.message);
+  }
+
+  const now = Date.now();
+  if (!forceOptimize && now - lastOptimizeAt < OPTIMIZE_INTERVAL_MS) {
+    return;
+  }
+
+  try {
+    db.pragma('optimize');
+    lastOptimizeAt = now;
+  } catch (error) {
+    console.error('[RA-H] Warning: PRAGMA optimize failed:', error.message);
+  }
+}
+
+function scheduleMaintenance() {
+  if (maintenanceTimer) return;
+
+  maintenanceTimer = setInterval(() => {
+    runMaintenance();
+  }, MAINTENANCE_INTERVAL_MS);
+
+  if (typeof maintenanceTimer.unref === 'function') {
+    maintenanceTimer.unref();
+  }
+}
+
+/**
+ * Initialize the database connection and run all pending migrations.
+ * Idempotent — safe to call multiple times; only runs once per process.
+ *
+ * @returns {import('better-sqlite3').Database}
  */
 function initDatabase() {
   if (db) {
@@ -38,86 +131,39 @@ function initDatabase() {
 
   const dbPath = getDatabasePath();
 
-  // Auto-create database if it doesn't exist
+  // Ensure parent directory exists for brand-new databases
   if (!fs.existsSync(dbPath)) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-    db = new Database(dbPath);
     console.error('[RA-H] Creating new database at:', dbPath);
-
-    // Create core schema
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS nodes (
-        id INTEGER PRIMARY KEY,
-        title TEXT,
-        description TEXT,
-        notes TEXT,
-        link TEXT,
-        event_date TEXT,
-        created_at TEXT,
-        updated_at TEXT,
-        metadata TEXT,
-        chunk TEXT,
-        embedding BLOB,
-        embedding_updated_at TEXT,
-        embedding_text TEXT,
-        chunk_status TEXT DEFAULT 'not_chunked'
-      );
-
-      CREATE TABLE IF NOT EXISTS edges (
-        id INTEGER PRIMARY KEY,
-        from_node_id INTEGER NOT NULL,
-        to_node_id INTEGER NOT NULL,
-        source TEXT,
-        created_at TEXT,
-        context TEXT,
-        FOREIGN KEY (from_node_id) REFERENCES nodes(id) ON DELETE CASCADE,
-        FOREIGN KEY (to_node_id) REFERENCES nodes(id) ON DELETE CASCADE
-      );
-      CREATE INDEX IF NOT EXISTS idx_edges_from ON edges(from_node_id);
-      CREATE INDEX IF NOT EXISTS idx_edges_to ON edges(to_node_id);
-
-      CREATE TABLE IF NOT EXISTS node_dimensions (
-        node_id INTEGER NOT NULL,
-        dimension TEXT NOT NULL,
-        PRIMARY KEY (node_id, dimension),
-        FOREIGN KEY (node_id) REFERENCES nodes(id) ON DELETE CASCADE
-      ) WITHOUT ROWID;
-      CREATE INDEX IF NOT EXISTS idx_dim_by_dimension ON node_dimensions(dimension, node_id);
-      CREATE INDEX IF NOT EXISTS idx_dim_by_node ON node_dimensions(node_id, dimension);
-
-      CREATE TABLE IF NOT EXISTS dimensions (
-        name TEXT PRIMARY KEY,
-        description TEXT,
-        icon TEXT,
-        is_priority INTEGER DEFAULT 0,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
-      );
-
-      -- Seed default dimensions
-      INSERT OR IGNORE INTO dimensions (name, is_priority) VALUES ('research', 1);
-      INSERT OR IGNORE INTO dimensions (name, is_priority) VALUES ('ideas', 1);
-      INSERT OR IGNORE INTO dimensions (name, is_priority) VALUES ('projects', 1);
-      INSERT OR IGNORE INTO dimensions (name, is_priority) VALUES ('memory', 1);
-      INSERT OR IGNORE INTO dimensions (name, is_priority) VALUES ('preferences', 1);
-    `);
-
-    console.error('[RA-H] Database created successfully');
-  } else {
-    db = new Database(dbPath);
   }
 
-  // Configure SQLite for performance
+  db = new Database(dbPath);
+
+  // Performance pragmas — applied before migrations so they take effect
   db.pragma('journal_mode = WAL');
   db.pragma('synchronous = NORMAL');
   db.pragma('cache_size = 5000');
   db.pragma('busy_timeout = 5000');
+  db.pragma('foreign_keys = ON');
 
+  // Apply all pending migrations
+  const applied = runMigrations(db);
+  if (applied > 0) {
+    console.error(`[RA-H] Applied ${applied} migration(s) successfully.`);
+  }
+
+  lastOptimizeAt = Date.now();
+  scheduleMaintenance();
+
+  console.error('[RA-H] Database ready:', dbPath);
   return db;
 }
 
 /**
- * Get the database instance.
- * Throws if not initialized.
+ * Return the current database instance.
+ * Throws if initDatabase() has not been called.
+ *
+ * @returns {import('better-sqlite3').Database}
  */
 function getDb() {
   if (!db) {
@@ -127,40 +173,63 @@ function getDb() {
 }
 
 /**
- * Execute a query and return rows.
+ * Execute a SQL statement and return results.
+ * SELECT/WITH/PRAGMA/RETURNING → array of rows.
+ * Everything else → { changes, lastInsertRowid }.
+ *
+ * @param {string} sql
+ * @param {unknown[]} [params]
+ * @returns {Record<string, unknown>[] | { changes: number; lastInsertRowid: number }}
  */
 function query(sql, params = []) {
   const database = getDb();
-  const stmt = database.prepare(sql);
+  const stmt = getCachedStatement(database, sql);
 
   const sqlLower = sql.trim().toLowerCase();
-  if (sqlLower.startsWith('select') || sqlLower.startsWith('with') || sqlLower.startsWith('pragma') || sqlLower.includes('returning')) {
+  const isSelect =
+    sqlLower.startsWith('select') ||
+    sqlLower.startsWith('with') ||
+    sqlLower.startsWith('pragma') ||
+    sqlLower.includes('returning');
+
+  if (isSelect) {
     return params.length > 0 ? stmt.all(...params) : stmt.all();
-  } else {
-    const result = params.length > 0 ? stmt.run(...params) : stmt.run();
-    return {
-      changes: result.changes,
-      lastInsertRowid: Number(result.lastInsertRowid)
-    };
   }
+
+  const result = params.length > 0 ? stmt.run(...params) : stmt.run();
+  return {
+    changes: result.changes,
+    lastInsertRowid: Number(result.lastInsertRowid),
+  };
 }
 
 /**
- * Execute a query in a transaction.
+ * Execute a callback inside a SQLite transaction.
+ * Rolls back automatically if the callback throws.
+ *
+ * @template T
+ * @param {() => T} callback
+ * @returns {T}
  */
 function transaction(callback) {
   const database = getDb();
-  const txn = database.transaction(callback);
-  return txn();
+  return database.transaction(callback)();
 }
 
 /**
  * Close the database connection.
+ * After calling this, initDatabase() must be called again to re-open.
  */
 function closeDatabase() {
   if (db) {
-    db.close();
-    db = null;
+    clearMaintenanceTimer();
+    try {
+      runMaintenance({ checkpointMode: 'TRUNCATE', forceOptimize: true });
+    } finally {
+      clearStatementCache();
+      db.close();
+      db = null;
+    }
   }
 }
 
@@ -170,5 +239,5 @@ module.exports = {
   query,
   transaction,
   closeDatabase,
-  getDatabasePath
+  getDatabasePath,
 };

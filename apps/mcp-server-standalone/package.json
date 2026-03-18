@@ -1,13 +1,17 @@
 {
   "name": "ra-h-mcp-server",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "description": "Connect Claude Code/Desktop to your RA-H knowledge base. Direct SQLite access - no web app required.",
   "main": "index.js",
   "bin": {
     "ra-h-mcp-server": "./index.js"
   },
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "test": "node tests/run-tests.js",
+    "test:unit": "node tests/run-tests.js unit",
+    "test:integration": "node tests/run-tests.js integration",
+    "bench": "node tests/run-benchmarks.js"
   },
   "keywords": [
     "mcp",
@@ -34,7 +38,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^11.10.0",
     "zod": "^3.23.0"
   },
   "engines": {
@@ -43,6 +47,7 @@
   "files": [
     "index.js",
     "services/",
+    "migrations/",
     "skills/",
     "README.md"
   ]
