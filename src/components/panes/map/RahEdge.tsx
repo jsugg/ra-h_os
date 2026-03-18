@@ -20,7 +20,6 @@ function RahEdgeComponent({
   targetY,
   style,
   data,
-  ...rest
 }: EdgeProps) {
   const [hovered, setHovered] = useState(false);
   const explanation = (data as RahEdgeData | undefined)?.explanation;

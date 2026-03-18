@@ -5,6 +5,28 @@ import { generateText } from 'ai';
 import { extractYouTube } from '@/services/typescript/extractors/youtube';
 import { formatNodeForChat } from '../infrastructure/nodeFormatter';
 
+interface ExtractedNodePayload {
+  success: boolean;
+  notes?: string;
+  chunk?: string;
+  metadata?: {
+    video_title?: string;
+    channel_name?: string;
+    channel_url?: string;
+    thumbnail_url?: string;
+    video_id?: string;
+    transcript_length?: number;
+    total_segments?: number;
+    language?: string;
+    extraction_method?: string;
+  };
+  error?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // AI-powered content analysis
 async function analyzeContentWithAI(title: string, description: string, contentType: string) {
   try {
@@ -124,7 +146,7 @@ export const youtubeExtractTool = tool({
         };
       }
 
-      let result: { success: boolean; notes?: string; chunk?: string; metadata?: any; error?: string };
+      let result: ExtractedNodePayload;
       
       console.log('📝 Using TypeScript yt-dlp extractor');
       try {
@@ -146,10 +168,10 @@ export const youtubeExtractTool = tool({
           },
           error: extractionResult.error
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         result = { 
           success: false, 
-          error: error.message || 'TypeScript extraction failed' 
+          error: getErrorMessage(error) || 'TypeScript extraction failed' 
         };
       }
 

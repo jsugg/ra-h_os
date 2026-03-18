@@ -86,7 +86,7 @@ export default function GuidesViewer() {
       } else {
         setError(data.error || 'Failed to save');
       }
-    } catch (err) {
+    } catch (_error) {
       setError('Failed to save skill');
     }
   };

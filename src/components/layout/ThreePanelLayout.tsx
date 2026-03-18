@@ -92,11 +92,10 @@ export default function ThreePanelLayout() {
   const [folderViewRefresh, setFolderViewRefresh] = useState(0);
 
   // Active dimension tracking
-  const [activeDimension, setActiveDimension] = usePersistentState<string | null>('ui.focus.activeDimension', null);
+  const [_activeDimension, setActiveDimension] = usePersistentState<string | null>('ui.focus.activeDimension', null);
 
   // Delegations state (deprecated - kept for component compatibility)
-  const [delegationsMap] = useState<Record<string, AgentDelegation>>({});
-  const delegations = useMemo(() => Object.values(delegationsMap), [delegationsMap]);
+  const [_delegationsMap] = useState<Record<string, AgentDelegation>>({});
 
   // Source awareness - highlighted passage context
   const [highlightedPassage, setHighlightedPassage] = useState<{
@@ -140,6 +139,8 @@ export default function ThreePanelLayout() {
   useEffect(() => {
     openTabsRef.current = openTabs;
   }, [openTabs]);
+
+  const handleNodeDeletedRef = useRef<(nodeId: number) => void>(() => {});
 
   // Delegations loading removed (delegation system removed in rah-light)
 
@@ -202,16 +203,22 @@ export default function ThreePanelLayout() {
       eventSource.onmessage = (event) => {
         try {
           const data: DatabaseEvent = JSON.parse(event.data);
+          const payload = (typeof data.data === 'object' && data.data !== null
+            ? data.data
+            : {}) as Record<string, unknown>;
+          const payloadNode = (typeof payload.node === 'object' && payload.node !== null
+            ? payload.node
+            : {}) as Record<string, unknown>;
 
           switch (data.type) {
             case 'NODE_CREATED':
               setNodesPanelRefresh(prev => prev + 1);
-              console.log('📥 Node created via helper:', data.data.node.title);
+              console.log('📥 Node created via helper:', payloadNode.title);
               break;
 
             case 'NODE_UPDATED':
               const currentOpenTabs = openTabsRef.current;
-              const updatedNodeId = Number(data.data.nodeId);
+              const updatedNodeId = Number(payload.nodeId);
               if (currentOpenTabs.includes(updatedNodeId)) {
                 setFocusPanelRefresh(prev => prev + 1);
               }
@@ -219,15 +226,15 @@ export default function ThreePanelLayout() {
               break;
 
             case 'NODE_DELETED':
-              handleNodeDeleted(data.data.nodeId);
+              handleNodeDeletedRef.current(Number(payload.nodeId));
               setNodesPanelRefresh(prev => prev + 1);
               break;
 
             case 'EDGE_CREATED':
             case 'EDGE_DELETED':
               const currentOpenTabsForEdge = openTabsRef.current;
-              if (currentOpenTabsForEdge.includes(data.data.fromNodeId) ||
-                  currentOpenTabsForEdge.includes(data.data.toNodeId)) {
+              if (currentOpenTabsForEdge.includes(Number(payload.fromNodeId)) ||
+                  currentOpenTabsForEdge.includes(Number(payload.toNodeId))) {
                 setFocusPanelRefresh(prev => prev + 1);
               }
               break;
@@ -240,7 +247,7 @@ export default function ThreePanelLayout() {
             case 'HELPER_UPDATED':
             case 'AGENT_UPDATED':
               if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('agents:updated', { detail: data.data }));
+                window.dispatchEvent(new CustomEvent('agents:updated', { detail: payload }));
               }
               break;
 
@@ -251,22 +258,26 @@ export default function ThreePanelLayout() {
 
             case 'GUIDE_UPDATED':
               if (typeof window !== 'undefined') {
-                window.dispatchEvent(new CustomEvent('guides:updated', { detail: data.data }));
-                window.dispatchEvent(new CustomEvent('skills:updated', { detail: data.data }));
+                window.dispatchEvent(new CustomEvent('guides:updated', { detail: payload }));
+                window.dispatchEvent(new CustomEvent('skills:updated', { detail: payload }));
               }
               break;
 
             case 'QUICK_ADD_COMPLETED':
-              if (data.data?.quickAddId) {
-                setPendingNodes(prev => prev.filter(p => p.id !== data.data.quickAddId));
+              if (typeof payload.quickAddId === 'string') {
+                setPendingNodes(prev => prev.filter(p => p.id !== payload.quickAddId));
               }
               break;
 
             case 'QUICK_ADD_FAILED':
-              if (data.data?.quickAddId) {
+              if (typeof payload.quickAddId === 'string') {
                 setPendingNodes(prev => prev.map(p =>
-                  p.id === data.data.quickAddId
-                    ? { ...p, status: 'error' as const, error: data.data.error || 'Unknown error' }
+                  p.id === payload.quickAddId
+                    ? {
+                        ...p,
+                        status: 'error' as const,
+                        error: typeof payload.error === 'string' ? payload.error : 'Unknown error'
+                      }
                     : p
                 ));
               }
@@ -394,7 +405,7 @@ export default function ThreePanelLayout() {
     setSelectedNodes(newSelection);
   }, [slotA, selectedNodes, setSlotA]);
 
-  const handleNodeCreated = useCallback((newNode: Node) => {
+  const _handleNodeCreated = useCallback((newNode: Node) => {
     setSelectedNodes(new Set([newNode.id]));
 
     // If slotA is node type, add to tabs
@@ -418,8 +429,10 @@ export default function ThreePanelLayout() {
     setActivePane('A');
   }, [slotA, setSlotA]);
 
-  const handleNodeDeleted = useCallback((nodeId: number) => {
-    handleCloseTab(nodeId);
+  useEffect(() => {
+    handleNodeDeletedRef.current = (nodeId: number) => {
+      handleCloseTab(nodeId);
+    };
   }, [handleCloseTab]);
 
   const handleReorderTabs = useCallback((fromIndex: number, toIndex: number) => {

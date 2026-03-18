@@ -78,7 +78,7 @@ export class DimensionService {
       return null;
     }
 
-    const row = result.rows[0] as any;
+    const row = result.rows[0] as Dimension;
     return {
       name: row.name,
       description: row.description,

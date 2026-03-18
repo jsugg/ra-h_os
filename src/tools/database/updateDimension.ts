@@ -22,7 +22,11 @@ export const updateDimensionTool = tool({
       }
 
       // Handle rename + other updates
-      const body: any = {
+      const body: {
+        currentName: string;
+        description: string;
+        newName?: string;
+      } = {
         currentName: params.currentName.trim(),
         description: params.description?.trim() || ''
       };

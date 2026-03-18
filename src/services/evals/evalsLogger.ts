@@ -217,6 +217,12 @@ function stringifySafe(value: unknown) {
   }
 }
 
+function getResultSuccess(value: unknown): boolean | null {
+  if (!value || typeof value !== 'object') return null;
+  const success = (value as { success?: unknown }).success;
+  return typeof success === 'boolean' ? success : null;
+}
+
 export function logEvalToolCall(entry: EvalToolCallLog) {
   if (!shouldLogEvals()) return;
   const context = RequestContext.get();
@@ -238,8 +244,8 @@ export function logEvalToolCall(entry: EvalToolCallLog) {
       ? String(entry.error)
       : null;
   const success = typeof entry.error === 'undefined'
-    ? entry.result && typeof (entry.result as any).success === 'boolean'
-      ? ((entry.result as any).success ? 1 : 0)
+    ? getResultSuccess(entry.result) !== null
+      ? (getResultSuccess(entry.result) ? 1 : 0)
       : 1
     : 0;
 

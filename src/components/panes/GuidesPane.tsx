@@ -19,8 +19,8 @@ interface Guide extends GuideMeta {
 
 export default function GuidesPane({
   slot,
-  isActive,
-  onPaneAction,
+  isActive: _isActive,
+  onPaneAction: _onPaneAction,
   onCollapse,
   onSwapPanes,
   tabBar,

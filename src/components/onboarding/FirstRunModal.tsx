@@ -1,17 +1,11 @@
 "use client";
 
-import { useState, useEffect, type CSSProperties } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { isFirstRun, markFirstRunComplete } from '@/services/storage/apiKeys';
 
 export default function FirstRunModal() {
-  const [isOpen, setIsOpen] = useState(false);
-
-  useEffect(() => {
-    if (isFirstRun()) {
-      setIsOpen(true);
-    }
-  }, []);
+  const [isOpen, setIsOpen] = useState(() => isFirstRun());
 
   const handleClose = () => {
     markFirstRunComplete();

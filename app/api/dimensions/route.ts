@@ -10,7 +10,7 @@ export async function GET() {
     const sqlite = getSQLiteClient();
 
     // Get all dimensions with their counts
-    const result = sqlite.query(`
+    const result = sqlite.query<{ dimension: string; description: string | null; icon: string | null; count: number }>(`
       WITH dimension_counts AS (
         SELECT nd.dimension, COUNT(*) AS count
         FROM node_dimensions nd
@@ -28,7 +28,7 @@ export async function GET() {
 
     return NextResponse.json({
       success: true,
-      data: result.rows.map((row: any) => ({
+      data: result.rows.map((row) => ({
         dimension: row.dimension,
         description: row.description,
         icon: row.icon || null,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     }
 
     const sqlite = getSQLiteClient();
-    const result = sqlite.query(`
+    const result = sqlite.query<{ name: string; description: string | null; icon: string | null; is_priority: number }>(`
       INSERT INTO dimensions(name, description, icon, is_priority, updated_at)
       VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(name) DO UPDATE SET
@@ -146,7 +146,7 @@ export async function PUT(request: NextRequest) {
       const updateResult = sqlite.transaction(() => {
         // Build update query with optional fields
         const updates: string[] = ['name = ?', 'updated_at = CURRENT_TIMESTAMP'];
-        const values: any[] = [newName];
+        const values: unknown[] = [newName];
         
         if (description !== '') {
           updates.push('description = ?');
@@ -233,7 +233,7 @@ export async function PUT(request: NextRequest) {
       
       // Build update query
       const updates: string[] = ['updated_at = CURRENT_TIMESTAMP'];
-      const values: any[] = [];
+      const values: unknown[] = [];
 
       if (description !== '') {
         updates.push('description = ?');

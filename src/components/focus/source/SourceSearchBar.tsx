@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 interface SourceSearchBarProps {
   content: string;
@@ -19,7 +19,6 @@ export default function SourceSearchBar({
   onHighlightChange
 }: SourceSearchBarProps) {
   const [query, setQuery] = useState('');
-  const [matches, setMatches] = useState<SearchMatch[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -28,13 +27,9 @@ export default function SourceSearchBar({
     inputRef.current?.focus();
   }, []);
 
-  // Search when query changes
-  useEffect(() => {
+  const matches = useMemo(() => {
     if (!query.trim()) {
-      setMatches([]);
-      setCurrentIndex(0);
-      onHighlightChange(null, 0);
-      return;
+      return [];
     }
 
     const searchQuery = query.toLowerCase();
@@ -52,22 +47,18 @@ export default function SourceSearchBar({
       pos = index + 1;
     }
 
-    setMatches(foundMatches);
-    setCurrentIndex(0);
+    return foundMatches;
+  }, [content, query]);
 
-    if (foundMatches.length > 0) {
-      onHighlightChange(foundMatches[0].text, 0);
-    } else {
-      onHighlightChange(null, 0);
-    }
-  }, [query, content, onHighlightChange]);
+  const activeIndex = matches.length === 0 ? 0 : Math.min(currentIndex, matches.length - 1);
 
-  // Update highlight when navigating
   useEffect(() => {
-    if (matches.length > 0 && matches[currentIndex]) {
-      onHighlightChange(matches[currentIndex].text, currentIndex);
+    if (!query.trim() || matches.length === 0) {
+      onHighlightChange(null, 0);
+      return;
     }
-  }, [currentIndex, matches, onHighlightChange]);
+    onHighlightChange(matches[activeIndex].text, activeIndex);
+  }, [activeIndex, matches, onHighlightChange, query]);
 
   const goToNext = () => {
     if (matches.length === 0) return;
@@ -124,7 +115,10 @@ export default function SourceSearchBar({
         ref={inputRef}
         type="text"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setCurrentIndex(0);
+        }}
         onKeyDown={handleKeyDown}
         placeholder="Search in source..."
         style={{
@@ -146,7 +140,7 @@ export default function SourceSearchBar({
           whiteSpace: 'nowrap',
         }}>
           {matches.length > 0
-            ? `${currentIndex + 1} of ${matches.length}`
+            ? `${activeIndex + 1} of ${matches.length}`
             : 'No matches'
           }
         </span>

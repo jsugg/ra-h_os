@@ -61,9 +61,6 @@ function NodeLabelInline({ id, title, onNodeClick }: NodeLabelInlineProps) {
   );
 }
 
-// Pattern to match [NODE:id:"title"]
-const nodePattern = /\[NODE:\s*(\d+)\s*:\s*["""'](.+?)["""']\s*\]/g;
-
 interface MarkdownWithNodeTokensProps {
   content: string;
   onNodeClick?: (nodeId: number) => void;
@@ -76,7 +73,7 @@ export default function MarkdownWithNodeTokens({ content, onNodeClick }: Markdow
   const placeholders: { id: string; title: string }[] = [];
 
   // Replace node tokens with placeholders before markdown parsing
-  nodePattern.lastIndex = 0;
+  const nodePattern = /\[NODE:\s*(\d+)\s*:\s*["""'](.+?)["""']\s*\]/g;
   const contentWithPlaceholders = content.replace(nodePattern, (_match, id, title) => {
     const index = placeholders.length;
     placeholders.push({ id, title });
@@ -90,8 +87,6 @@ export default function MarkdownWithNodeTokens({ content, onNodeClick }: Markdow
     let lastIdx = 0;
     let m;
     let matchCount = 0;
-
-    placeholderPattern.lastIndex = 0;
 
     while ((m = placeholderPattern.exec(text)) !== null) {
       if (m.index > lastIdx) {

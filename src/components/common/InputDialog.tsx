@@ -14,8 +14,8 @@ interface InputDialogProps {
   onCancel: () => void;
 }
 
-export default function InputDialog({
-  open,
+function InputDialogContent({
+  open: _open,
   title,
   message,
   placeholder = '',
@@ -29,15 +29,13 @@ export default function InputDialog({
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setInputValue(defaultValue);
-      // Focus input when dialog opens
-      setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 100);
-    }
-  }, [open, defaultValue]);
+    const focusTimer = window.setTimeout(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    }, 100);
+
+    return () => window.clearTimeout(focusTimer);
+  }, []);
 
   const handleConfirm = () => {
     if (inputValue.trim()) {
@@ -55,8 +53,6 @@ export default function InputDialog({
       onCancel();
     }
   };
-
-  if (!open) return null;
 
   return (
     <div
@@ -208,3 +204,13 @@ export default function InputDialog({
   );
 }
 
+export default function InputDialog(props: InputDialogProps) {
+  if (!props.open) return null;
+
+  return (
+    <InputDialogContent
+      key={`${props.title}:${props.defaultValue ?? ''}`}
+      {...props}
+    />
+  );
+}

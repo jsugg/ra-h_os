@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, type DragEvent } from 'react';
-import { Eye, Trash2, Link, Loader, Database, Check, RefreshCw, Pencil, X, Save, Plus } from 'lucide-react';
-import { parseAndRenderContent } from '@/components/helpers/NodeLabelRenderer';
+import { useState, useEffect, useRef, useCallback, type DragEvent } from 'react';
+import { Trash2, Link, Loader, Database, RefreshCw, Pencil, X, Save, Plus } from 'lucide-react';
 import MarkdownWithNodeTokens from '@/components/helpers/MarkdownWithNodeTokens';
 import FormattingToolbar from '@/components/focus/FormattingToolbar';
 import { parseNodeMarkers } from '@/tools/infrastructure/nodeFormatter';
@@ -28,6 +27,11 @@ interface NodeSearchResult {
   id: number;
   title: string;
   dimensions?: string[];
+}
+
+interface NodeSearchResponse {
+  success: boolean;
+  data: NodeSearchResult[];
 }
 
 interface FocusPanelProps {
@@ -90,12 +94,12 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
   // Edges state management (following same patterns as nodes)
   const [edgesData, setEdgesData] = useState<{ [key: number]: NodeConnection[] }>({});
   const [loadingEdges, setLoadingEdges] = useState<Set<number>>(new Set());
-  const [addingEdge, setAddingEdge] = useState<number | null>(null);
+  const [_addingEdge, setAddingEdge] = useState<number | null>(null);
   const [nodeSearchQuery, setNodeSearchQuery] = useState('');
   const [nodeSearchSuggestions, setNodeSearchSuggestions] = useState<NodeSearchResult[]>([]);
   const [selectedSearchIndex, setSelectedSearchIndex] = useState(0);
-  const [edgeExplanation, setEdgeExplanation] = useState('');
-  const [pendingEdgeTarget, setPendingEdgeTarget] = useState<{ id: number; title: string } | null>(null);
+  const [_edgeExplanation, setEdgeExplanation] = useState('');
+  const [_pendingEdgeTarget, setPendingEdgeTarget] = useState<{ id: number; title: string } | null>(null);
   const [deletingEdge, setDeletingEdge] = useState<number | null>(null);
   const [edgeEditingId, setEdgeEditingId] = useState<number | null>(null);
   const [edgeEditingValue, setEdgeEditingValue] = useState<string>('');
@@ -104,7 +108,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
   const [pendingDeleteNodeId, setPendingDeleteNodeId] = useState<number | null>(null);
   
   // Chunk content toggle state - default to expanded (true)
-  const [chunkExpanded, setChunkExpanded] = useState<{ [key: number]: boolean }>({});
+  const [_chunkExpanded, _setChunkExpanded] = useState<{ [key: number]: boolean }>({});
   
   // Edges expand/collapse state
   // edgesExpanded removed — all connections shown in Edges tab
@@ -143,10 +147,29 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
   // Embedded chunks state (actual chunks from chunks table)
   const [chunksData, setChunksData] = useState<Record<number, Chunk[]>>({});
   const [loadingChunks, setLoadingChunks] = useState<Set<number>>(new Set());
-  const [chunksExpanded, setChunksExpanded] = useState<Record<number, boolean>>({});
+  const [_chunksExpanded, _setChunksExpanded] = useState<Record<number, boolean>>({});
+
+  const getEdgeContextRecord = (
+    context: NodeConnection['edge']['context'],
+  ): Record<string, unknown> | null => {
+    if (!context || typeof context !== 'object' || Array.isArray(context)) {
+      return null;
+    }
+    return context as Record<string, unknown>;
+  };
+
+  const getEdgeExplanation = (connection: NodeConnection): string => {
+    const explanation = getEdgeContextRecord(connection.edge.context)?.explanation;
+    return typeof explanation === 'string' ? explanation : '';
+  };
+
+  const getEdgeType = (connection: NodeConnection): string | null => {
+    const type = getEdgeContextRecord(connection.edge.context)?.type;
+    return typeof type === 'string' ? type : null;
+  };
 
   // Helper: preview edge type based on heuristics (mirrors backend logic)
-  const previewEdgeType = (explanation: string): { type: string; label: string } | null => {
+  const _previewEdgeType = (explanation: string): { type: string; label: string } | null => {
     const norm = (explanation || '').trim().toLowerCase();
     if (!norm) return null;
 
@@ -186,12 +209,12 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
     const fetchNodeSearchSuggestions = async () => {
       try {
         const response = await fetch(`/api/nodes/search?q=${encodeURIComponent(nodeSearchQuery)}&limit=10`);
-        const result = await response.json();
+        const result = (await response.json()) as NodeSearchResponse;
         
         if (result.success) {
           const nodeSuggestions: NodeSearchResult[] = result.data
-            .filter((node: any) => node.id !== activeTab) // Exclude current node
-            .map((node: any) => ({
+            .filter((node) => node.id !== activeTab) // Exclude current node
+            .map((node) => ({
               id: node.id,
               title: node.title,
               dimensions: node.dimensions || []
@@ -314,7 +337,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
   };
 
   // Fetch embedded chunks for a node
-  const fetchChunksData = async (nodeId: number) => {
+  const fetchChunksData = useCallback(async (nodeId: number) => {
     if (loadingChunks.has(nodeId)) return;
     setLoadingChunks(prev => new Set(prev).add(nodeId));
     try {
@@ -332,14 +355,14 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
         return newSet;
       });
     }
-  };
+  }, [loadingChunks]);
 
   // Fetch chunks when switching to Source tab
   useEffect(() => {
     if (activeContentTab === 'source' && activeTab && !chunksData[activeTab] && !loadingChunks.has(activeTab)) {
       fetchChunksData(activeTab);
     }
-  }, [activeContentTab, activeTab]);
+  }, [activeContentTab, activeTab, chunksData, fetchChunksData, loadingChunks]);
 
   const truncateTitle = (title: string, maxLength: number = 20) => {
     if (title.length <= maxLength) return title;
@@ -872,7 +895,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
     }
   };
 
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const _handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const val = e.target.value;
     setEditingValue(val);
 
@@ -890,7 +913,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
     }
   };
 
-  const replaceMentionWithToken = async (nodeId: number, title: string) => {
+  const _replaceMentionWithToken = async (nodeId: number, title: string) => {
     if (!inputRef.current || !(inputRef.current instanceof HTMLTextAreaElement)) return;
     if (activeNodeId === null) return;
     const ta = inputRef.current as HTMLTextAreaElement;
@@ -1092,7 +1115,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
 
   // Edge management functions (following same patterns as node functions)
 
-  const handleEdgeNodeSelect = async (targetNodeId: number, _targetNodeTitle?: string) => {
+  const _handleEdgeNodeSelect = async (targetNodeId: number, _targetNodeTitle?: string) => {
     // Immediately create edge - backend auto-infers explanation and type
     await createEdgeAuto(targetNodeId);
   };
@@ -1155,7 +1178,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
   };
 
   // Legacy function for manual explanation (kept for compatibility)
-  const createEdgeWithExplanation = async (targetNodeId: number, explanation: string) => {
+  const _createEdgeWithExplanation = async (targetNodeId: number, explanation: string) => {
     if (activeNodeId === null) return;
     try {
       const response = await fetch('/api/edges', {
@@ -1465,7 +1488,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              saveEdgeExplanation(connection.edge.id, connection.edge.context);
+                              saveEdgeExplanation(connection.edge.id, getEdgeContextRecord(connection.edge.context));
                             } else if (e.key === 'Escape') {
                               e.preventDefault();
                               cancelEditEdgeExplanation();
@@ -1487,7 +1510,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                           autoFocus
                         />
                         <button
-                          onClick={() => saveEdgeExplanation(connection.edge.id, connection.edge.context)}
+                          onClick={() => saveEdgeExplanation(connection.edge.id, getEdgeContextRecord(connection.edge.context))}
                           disabled={edgeSavingId === connection.edge.id}
                           style={{
                             fontSize: '10px',
@@ -1520,7 +1543,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                       </div>
                     ) : (
                       <div
-                        onClick={() => startEditEdgeExplanation(connection.edge.id, connection.edge.context?.explanation)}
+                        onClick={() => startEditEdgeExplanation(connection.edge.id, getEdgeExplanation(connection) || undefined)}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
@@ -1532,7 +1555,7 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                         onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.8'; }}
                         onMouseLeave={(e) => { e.currentTarget.style.opacity = '1'; }}
                       >
-                        {typeof connection.edge.context?.type === 'string' && (
+                        {getEdgeType(connection) && (
                           <span style={{
                             fontSize: '9px',
                             color: '#888',
@@ -1543,23 +1566,23 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                             flexShrink: 0,
                             whiteSpace: 'nowrap',
                           }}>
-                            {String(connection.edge.context.type).replace(/_/g, ' ')}
+                            {String(getEdgeType(connection)).replace(/_/g, ' ')}
                           </span>
                         )}
                         <span
                           style={{
                             fontSize: '11px',
-                            color: connection.edge.context?.explanation ? '#777' : '#444',
-                            fontStyle: connection.edge.context?.explanation ? 'normal' : 'italic',
+                            color: getEdgeExplanation(connection) ? '#777' : '#444',
+                            fontStyle: getEdgeExplanation(connection) ? 'normal' : 'italic',
                             overflow: 'hidden',
                             textOverflow: 'ellipsis',
                             whiteSpace: 'nowrap',
                             flex: 1,
                             minWidth: 0,
                           }}
-                          title={String(connection.edge.context?.explanation || '')}
+                          title={getEdgeExplanation(connection)}
                         >
-                          {(connection.edge.context?.explanation as string) || 'Add explanation...'}
+                          {getEdgeExplanation(connection) || 'Add explanation...'}
                         </span>
                       </div>
                     )}

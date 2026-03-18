@@ -1,25 +1,26 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 export function usePersistentState<T>(
   key: string,
   defaultValue: T
 ): [T, (value: T | ((prev: T) => T)) => void] {
-  // Initialize with default value first
-  const [state, setState] = useState<T>(defaultValue);
-  
-  // Load from localStorage after mount
-  useEffect(() => {
+  const [state, setState] = useState<T>(() => {
+    if (typeof window === 'undefined') {
+      return defaultValue;
+    }
+
     try {
       const item = window.localStorage.getItem(key);
       if (item !== null) {
-        setState(JSON.parse(item));
+        return JSON.parse(item) as T;
       }
     } catch (error) {
       console.error(`Error loading ${key} from localStorage:`, error);
     }
-  }, [key]);
+    return defaultValue;
+  });
   
   // Save to localStorage when state changes
   const setPersistentState = (value: T | ((prev: T) => T)) => {

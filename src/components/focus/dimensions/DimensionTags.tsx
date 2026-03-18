@@ -25,8 +25,8 @@ export default function DimensionTags({
 }: DimensionTagsProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<DimensionSuggestion[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [_suggestions, setSuggestions] = useState<DimensionSuggestion[]>([]);
+  const [_isLoading, setIsLoading] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -153,7 +153,7 @@ export default function DimensionTags({
     setDraggedIndex(null);
   };
 
-  const moveDimension = async (fromIndex: number, direction: 'up' | 'down') => {
+  const _moveDimension = async (fromIndex: number, direction: 'up' | 'down') => {
     const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
     if (toIndex < 0 || toIndex >= sortedDimensions.length) return;
 

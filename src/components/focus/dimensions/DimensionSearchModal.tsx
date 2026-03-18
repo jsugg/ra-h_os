@@ -98,7 +98,7 @@ export default function DimensionSearchModal({
   }, [isOpen, onClose]);
 
   // Track if we're in "create new" mode to avoid re-fetching
-  const isCreatingNew = searchQuery.trim() &&
+  const _isCreatingNew = searchQuery.trim() &&
     !suggestions.some(s => s.dimension.toLowerCase() === searchQuery.toLowerCase().trim());
 
   // Fetch dimension suggestions

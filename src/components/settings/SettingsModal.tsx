@@ -26,11 +26,10 @@ interface SettingsModalProps {
 
 type TabType = SettingsTab;
 
-export default function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('logs');
-  useEffect(() => {
-    if (!isOpen) return;
+function SettingsModalContent({ onClose, initialTab }: Omit<SettingsModalProps, 'isOpen'>) {
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab ?? 'logs');
 
+  useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
@@ -39,14 +38,7 @@ export default function SettingsModal({ isOpen, onClose, initialTab }: SettingsM
 
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
-
-  useEffect(() => {
-    if (!isOpen || !initialTab) return;
-    setActiveTab(initialTab);
-  }, [initialTab, isOpen]);
-
-  if (!isOpen) return null;
+  }, [onClose]);
 
   const modalContent = (
     <div
@@ -316,7 +308,7 @@ export default function SettingsModal({ isOpen, onClose, initialTab }: SettingsM
 
           {/* Content */}
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            {activeTab === 'logs' && <LogsViewer key={isOpen ? 'open' : 'closed'} />}
+            {activeTab === 'logs' && <LogsViewer key="open" />}
             {activeTab === 'tools' && <ToolsViewer />}
             {activeTab === 'guides' && <SkillsViewer />}
             {activeTab === 'apikeys' && <ApiKeysViewer />}
@@ -330,4 +322,16 @@ export default function SettingsModal({ isOpen, onClose, initialTab }: SettingsM
   );
 
   return createPortal(modalContent, document.body);
+}
+
+export default function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <SettingsModalContent
+      key={initialTab ?? 'logs'}
+      onClose={onClose}
+      initialTab={initialTab}
+    />
+  );
 }

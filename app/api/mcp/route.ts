@@ -18,6 +18,7 @@ import { z } from 'zod';
 
 import { nodeService, edgeService } from '@/services/database';
 import { getSQLiteClient } from '@/services/database/sqlite-client';
+import type { Edge, NodeFilters } from '@/types/database';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -28,6 +29,42 @@ const SERVER_INFO = {
   name: 'ra-h-mcp',
   version: '1.0.0',
 };
+
+type McpDimensionRow = {
+  dimension: string;
+  description: string | null;
+  isPriority: number | boolean;
+  count: number;
+};
+
+type McpLoadedNode = {
+  id: number;
+  title: string;
+  description: string | null;
+  notes: string | null;
+  link: string | null;
+  dimensions: string[];
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+function parseEdgeContext(context: unknown): Record<string, unknown> {
+  if (context && typeof context === 'object' && !Array.isArray(context)) {
+    return context as Record<string, unknown>;
+  }
+  if (typeof context === 'string') {
+    try {
+      const parsed = JSON.parse(context);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
 
 function buildInstructions(): string {
   const lines = [
@@ -73,7 +110,7 @@ function createRAHServer(): McpServer {
       },
     },
     async ({ query, limit = 20, dimensions }) => {
-      const filters: any = {
+      const filters: NodeFilters = {
         search: query.trim(),
         limit: Math.min(Math.max(limit, 1), 50),
       };
@@ -92,7 +129,7 @@ function createRAHServer(): McpServer {
         content: [{ type: 'text', text: summary }],
         structuredContent: {
           count: nodes.length,
-          nodes: nodes.map((node: any) => ({
+          nodes: nodes.map((node) => ({
             id: node.id,
             title: node.title,
             description: node.description ?? null,
@@ -125,7 +162,7 @@ function createRAHServer(): McpServer {
         };
       }
 
-      const nodes: any[] = [];
+      const nodes: McpLoadedNode[] = [];
       for (const id of uniqueIds) {
         try {
           const node = await nodeService.getNodeById(id);
@@ -142,7 +179,7 @@ function createRAHServer(): McpServer {
               updated_at: node.updated_at,
             });
           }
-        } catch (e) {
+        } catch (_error) {
           // Skip missing nodes
         }
       }
@@ -166,7 +203,7 @@ function createRAHServer(): McpServer {
       },
     },
     async ({ nodeId, limit = 50 }) => {
-      let edges: any[];
+      let edges: Edge[];
 
       if (nodeId) {
         const connections = await edgeService.getNodeConnections(nodeId);
@@ -176,19 +213,12 @@ function createRAHServer(): McpServer {
         edges = edges.slice(0, limit);
       }
 
-      const parseContext = (ctx: any) => {
-        if (typeof ctx === 'string') {
-          try { return JSON.parse(ctx); } catch { return {}; }
-        }
-        return ctx || {};
-      };
-
       return {
         content: [{ type: 'text', text: `Found ${edges.length} connection(s).` }],
         structuredContent: {
           count: edges.length,
-          edges: edges.map((e: any) => {
-            const ctx = parseContext(e.context);
+          edges: edges.map((e) => {
+            const ctx = parseEdgeContext(e.context);
             return {
               id: e.id,
               from_node_id: e.from_node_id,
@@ -214,7 +244,7 @@ function createRAHServer(): McpServer {
     async () => {
       const sqlite = getSQLiteClient();
 
-      const result = sqlite.query(`
+      const result = sqlite.query<McpDimensionRow>(`
         WITH dimension_counts AS (
           SELECT nd.dimension, COUNT(*) AS count
           FROM node_dimensions nd
@@ -230,7 +260,7 @@ function createRAHServer(): McpServer {
         ORDER BY dc.count DESC, d.name ASC
       `);
 
-      const dimensions = result.rows.map((row: any) => ({
+      const dimensions = result.rows.map((row) => ({
         name: row.dimension,
         description: row.description ?? null,
         isPriority: Boolean(row.isPriority),
@@ -453,7 +483,7 @@ function createRAHServer(): McpServer {
         },
       },
       async ({ name, newName, description, isPriority }) => {
-        const payload: any = {};
+        const payload: Record<string, unknown> = {};
         if (newName) {
           payload.currentName = name;
           payload.newName = newName;

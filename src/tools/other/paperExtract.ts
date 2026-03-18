@@ -5,6 +5,27 @@ import { generateText } from 'ai';
 import { extractPaper } from '@/services/typescript/extractors/paper';
 import { formatNodeForChat } from '../infrastructure/nodeFormatter';
 
+interface ExtractedNodePayload {
+  success: boolean;
+  notes?: string;
+  chunk?: string;
+  metadata?: {
+    title?: string;
+    pages?: number;
+    info?: { Author?: string } & Record<string, unknown>;
+    filename?: string;
+    extraction_method?: string;
+    author?: string;
+    file_size?: number;
+    text_length?: number;
+  };
+  error?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // AI-powered content analysis
 async function analyzeContentWithAI(title: string, description: string, contentType: string) {
   try {
@@ -95,7 +116,7 @@ export const paperExtractTool = tool({
         };
       }
 
-      let result: { success: boolean; notes?: string; chunk?: string; metadata?: any; error?: string };
+      let result: ExtractedNodePayload;
       
       try {
         const extractionResult = await extractPaper(url);
@@ -112,10 +133,10 @@ export const paperExtractTool = tool({
             extraction_method: 'typescript'
           }
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         result = { 
           success: false, 
-          error: error.message || 'TypeScript extraction failed' 
+          error: getErrorMessage(error) || 'TypeScript extraction failed' 
         };
       }
 

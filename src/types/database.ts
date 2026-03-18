@@ -1,3 +1,10 @@
+export type JsonPrimitive = string | number | boolean | null;
+export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}
+
 // New Node-based type system replacing rigid Item categorization
 export interface Node {
   id: number;
@@ -9,7 +16,7 @@ export interface Node {
   dimensions: string[];       // Flexible dimensions replacing type + stage + segment + tags
   embedding?: Buffer;         // Node-level embedding (BLOB data)
   chunk?: string;
-  metadata?: any;            // Flexible metadata storage
+  metadata?: Record<string, unknown> | null; // Flexible metadata storage
   created_at: string;
   updated_at: string;
   edge_count?: number;       // Derived count of edges, included in some queries
@@ -27,7 +34,7 @@ export interface Chunk {
   text: string;
   embedding?: number[];
   embedding_type: string;
-  metadata?: any;            // Updated from extras to metadata
+  metadata?: Record<string, unknown> | null; // Updated from extras to metadata
   created_at: string;
 }
 
@@ -35,7 +42,7 @@ export interface Edge {
   id: number;
   from_node_id: number;
   to_node_id: number;
-  context?: any;
+  context?: EdgeContext | Record<string, unknown> | null;
   source: EdgeSource;
   created_at: string;
 }
@@ -84,7 +91,7 @@ export interface ChunkData {
   text: string;
   embedding?: number[];
   embedding_type: string;
-  metadata?: any;            // Updated from extras
+  metadata?: Record<string, unknown> | null; // Updated from extras
 }
 
 export interface EdgeData {
@@ -101,7 +108,7 @@ export interface ChatData {
   assistant_message?: string;
   thread_id: string;
   focused_node_id?: number;  // Updated from focused_item_id
-  metadata?: any;
+  metadata?: Record<string, unknown> | null;
   embedding?: number[];      // Renamed from content_embedding
 }
 
@@ -115,7 +122,7 @@ export interface NodeConnection {
 export interface DatabaseError {
   message: string;
   code?: string;
-  details?: any;
+  details?: Record<string, unknown> | null;
 }
 
 // Dimension interface for dimension management

@@ -1,6 +1,19 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 
+interface TavilyResult {
+  title?: string;
+  content?: string;
+  url?: string;
+  score?: number;
+  published_date?: string | null;
+}
+
+interface TavilyResponse {
+  results?: TavilyResult[];
+  answer?: string | null;
+}
+
 export const webSearchTool = tool({
   description: 'Search web via Tavily',
   inputSchema: z.object({
@@ -42,11 +55,11 @@ export const webSearchTool = tool({
         throw new Error(`Tavily API failed with status: ${response.status} - ${errorText}`);
       }
       
-      const data = await response.json();
+      const data = (await response.json()) as TavilyResponse;
       console.log('WebSearch: Tavily response received with', data.results?.length || 0, 'results');
       
       // Extract results from Tavily response
-      const results = (data.results || []).map((result: any) => ({
+      const results = (data.results || []).map((result) => ({
         title: result.title || 'No title',
         snippet: result.content || 'No description available',
         url: result.url || '',

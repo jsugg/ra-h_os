@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
 
 interface RawFormatterProps {
   content: string;
@@ -9,18 +9,29 @@ interface RawFormatterProps {
   highlightMatchIndex?: number;
 }
 
+function countMatches(text: string, searchLower: string): number {
+  if (!searchLower) return 0;
+
+  const textLower = text.toLowerCase();
+  let matchCount = 0;
+  let pos = 0;
+
+  while (pos < textLower.length) {
+    const index = textLower.indexOf(searchLower, pos);
+    if (index === -1) break;
+    matchCount += 1;
+    pos = index + 1;
+  }
+
+  return matchCount;
+}
+
 /**
  * Raw/Typography formatter for the Source Reader
  * Applies comfortable reading typography without any content transformation
  * Works as the default/fallback for all content types
  */
 export default function RawFormatter({ content, onTextSelect, highlightedText, highlightMatchIndex = 0 }: RawFormatterProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const globalMatchCounter = useRef(0);
-
-  // Reset counter before each render
-  globalMatchCounter.current = 0;
-
   // Handle text selection - fires on mouseup
   const handleMouseUp = useCallback(() => {
     if (!onTextSelect) return;
@@ -40,8 +51,35 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
     }
   }, [onTextSelect]);
 
+  // Split content into paragraphs for better rendering
+  const paragraphs = useMemo(() => {
+    if (!content) return [];
+
+    // Split on double newlines to detect paragraphs
+    // But preserve single newlines within paragraphs
+    return content
+      .split(/\n\n+/)
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+  }, [content]);
+
+  const paragraphMatchOffsets = useMemo(() => {
+    if (!highlightedText) {
+      return paragraphs.map(() => 0);
+    }
+
+    const searchLower = highlightedText.toLowerCase();
+    let runningOffset = 0;
+
+    return paragraphs.map((paragraph) => {
+      const offset = runningOffset;
+      runningOffset += countMatches(paragraph, searchLower);
+      return offset;
+    });
+  }, [highlightedText, paragraphs]);
+
   // Render text with all highlights, marking current one specially
-  const renderWithHighlight = useCallback((text: string): React.ReactNode => {
+  const renderWithHighlight = (text: string, matchOffset: number): React.ReactNode => {
     if (!highlightedText) return text;
 
     const textLower = text.toLowerCase();
@@ -54,6 +92,7 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let pos = 0;
+    let localMatchIndex = 0;
 
     while (pos < textLower.length) {
       const index = textLower.indexOf(searchLower, pos);
@@ -63,8 +102,8 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
         parts.push(text.slice(lastIndex, index));
       }
 
-      const isCurrent = globalMatchCounter.current === highlightMatchIndex;
-      globalMatchCounter.current++;
+      const isCurrent = matchOffset + localMatchIndex === highlightMatchIndex;
+      localMatchIndex += 1;
 
       parts.push(
         <mark
@@ -90,18 +129,7 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
     }
 
     return parts.length > 0 ? <>{parts}</> : text;
-  }, [highlightedText, highlightMatchIndex]);
-  // Split content into paragraphs for better rendering
-  const paragraphs = useMemo(() => {
-    if (!content) return [];
-
-    // Split on double newlines to detect paragraphs
-    // But preserve single newlines within paragraphs
-    return content
-      .split(/\n\n+/)
-      .map(p => p.trim())
-      .filter(p => p.length > 0);
-  }, [content]);
+  };
 
   if (!content) {
     return (
@@ -119,7 +147,6 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
 
   return (
     <div 
-      ref={containerRef}
       onMouseUp={handleMouseUp}
       style={{
         maxWidth: '680px',
@@ -141,7 +168,7 @@ export default function RawFormatter({ content, onTextSelect, highlightedText, h
             wordWrap: 'break-word',
           }}
         >
-          {renderWithHighlight(paragraph)}
+          {renderWithHighlight(paragraph, paragraphMatchOffsets[index] ?? 0)}
         </p>
       ))}
     </div>

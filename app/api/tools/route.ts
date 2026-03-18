@@ -14,9 +14,12 @@ export async function GET() {
       const tools = getHelperTools([toolName]);
       const tool = tools[toolName];
       if (tool) {
+        const description = typeof tool.description === 'string'
+          ? tool.description
+          : 'No description available';
         grouped[groupId]?.push({
           name: toolName,
-          description: tool.description || 'No description available',
+          description,
         });
       }
     });

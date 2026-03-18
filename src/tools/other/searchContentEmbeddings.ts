@@ -84,7 +84,7 @@ export const searchContentEmbeddingsTool = tool({
       }
 
       // If no results and threshold is high, suggest retry with lower threshold
-      let suggestions: string[] = [];
+      const suggestions: string[] = [];
       if (!hasResults && similarity_threshold > 0.3) {
         suggestions.push(`No results found with similarity >= ${similarity_threshold}. Try lowering the threshold to 0.3 for broader results.`);
       }

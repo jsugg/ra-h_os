@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { X, Plus, ChevronDown } from 'lucide-react';
+import { X, Plus } from 'lucide-react';
 import { ViewFilter } from '@/types/views';
 
 interface ViewFiltersProps {

@@ -13,7 +13,7 @@ export interface ToolSchema {
     description: string;
     parameters: {
       type: 'object';
-      properties: Record<string, any>;
+      properties: Record<string, unknown>;
       required: string[];
     };
   };
@@ -24,5 +24,5 @@ export interface Tool {
   name: string;
   description: string;
   schema: ToolSchema;
-  execute: (params: any, context: ToolContext) => Promise<any>;
+  execute: (params: unknown, context: ToolContext) => Promise<unknown>;
 }

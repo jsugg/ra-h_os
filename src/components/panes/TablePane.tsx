@@ -11,8 +11,8 @@ export interface TablePaneProps extends BasePaneProps {
 
 export default function TablePane({
   slot,
-  isActive,
-  onPaneAction,
+  isActive: _isActive,
+  onPaneAction: _onPaneAction,
   onCollapse,
   onSwapPanes,
   tabBar,

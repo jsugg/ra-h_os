@@ -1,7 +1,6 @@
 "use client";
 
 import React from 'react';
-import { FileText } from 'lucide-react';
 
 interface NodeLabelProps {
   id: string;
@@ -10,7 +9,7 @@ interface NodeLabelProps {
   onNodeClick?: (nodeId: number) => void;
 }
 
-function NodeLabel({ id, title, dimensions, onNodeClick }: NodeLabelProps) {
+function NodeLabel({ id, title, dimensions: _dimensions, onNodeClick }: NodeLabelProps) {
   const handleClick = (e: React.MouseEvent) => {
     // Prevent bubbling into parent containers (e.g., content view onClick that toggles edit)
     e.stopPropagation();

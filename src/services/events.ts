@@ -19,8 +19,7 @@ export interface DatabaseEvent {
     | 'QUICK_ADD_COMPLETED'
     | 'QUICK_ADD_FAILED'
     | 'CONNECTION_ESTABLISHED';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  data: any;
+  data: unknown;
   timestamp: number;
 }
 
@@ -62,7 +61,7 @@ class EventBroadcaster {
       try {
         controller.enqueue(data);
         successCount++;
-      } catch (error) {
+      } catch (_error) {
         // Connection is closed, remove it
         console.log('🔌 Removing dead SSE connection');
         this.connections.delete(controller);
@@ -83,7 +82,7 @@ class EventBroadcaster {
     for (const controller of this.connections) {
       try {
         controller.enqueue(data);
-      } catch (error) {
+      } catch (_error) {
         this.connections.delete(controller);
       }
     }
@@ -99,9 +98,7 @@ class EventBroadcaster {
 
 // Global singleton instance with proper Next.js dev mode handling
 declare global {
-  // eslint-disable-next-line no-var
   var eventBroadcaster: EventBroadcaster | undefined;
-  // eslint-disable-next-line no-var
   var keepAliveInterval: NodeJS.Timeout | undefined;
 }
 
