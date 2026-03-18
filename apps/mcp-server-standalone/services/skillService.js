@@ -4,6 +4,21 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 
+// query is loaded lazily to avoid circular dependency at module initialisation.
+// sqlite-client → migrations/runner → skillService (via listSkills in buildInstructions)
+// By deferring require, we ensure the DB is initialised before we query it.
+let _query = null;
+function getQuery() {
+  if (!_query) _query = require('./sqlite-client').query;
+  return _query;
+}
+
+let _sessionService = null;
+function getSessionService() {
+  if (!_sessionService) _sessionService = require('./sessionService');
+  return _sessionService;
+}
+
 const SKILLS_DIR = path.join(
   os.homedir(),
   'Library', 'Application Support', 'RA-H', 'skills'
@@ -197,6 +212,8 @@ function resolveSkillFilename(name) {
 }
 
 let initialized = false;
+/** @type {{ signature: string; skills: Array<{ name: string; description: string; immutable: boolean }> } | null} */
+let skillListCache = null;
 
 function init() {
   if (initialized) return;
@@ -208,11 +225,37 @@ function init() {
   initialized = true;
 }
 
+function invalidateSkillListCache() {
+  skillListCache = null;
+}
+
+function cloneSkillList(skills) {
+  return skills.map((skill) => ({ ...skill }));
+}
+
+function getSkillListSignature(files) {
+  return files
+    .map((file) => {
+      const filepath = path.join(SKILLS_DIR, file);
+      const stats = fs.statSync(filepath);
+      return `${file}:${stats.mtimeMs}:${stats.size}`;
+    })
+    .join('|');
+}
+
 function listSkills() {
   init();
   if (!fs.existsSync(SKILLS_DIR)) return [];
 
-  const files = fs.readdirSync(SKILLS_DIR).filter((f) => f.endsWith('.md'));
+  const files = fs.readdirSync(SKILLS_DIR)
+    .filter((f) => f.endsWith('.md'))
+    .sort();
+  const signature = getSkillListSignature(files);
+
+  if (skillListCache && skillListCache.signature === signature) {
+    return cloneSkillList(skillListCache.skills);
+  }
+
   const skills = files.map((file) => {
     const raw = fs.readFileSync(path.join(SKILLS_DIR, file), 'utf-8');
     const { data } = parseFrontmatter(raw);
@@ -223,7 +266,9 @@ function listSkills() {
     };
   });
 
-  return skills.sort((a, b) => a.name.localeCompare(b.name));
+  const sortedSkills = skills.sort((a, b) => a.name.localeCompare(b.name));
+  skillListCache = { signature, skills: sortedSkills };
+  return cloneSkillList(sortedSkills);
 }
 
 function readSkill(name) {
@@ -236,12 +281,38 @@ function readSkill(name) {
   const filepath = path.join(SKILLS_DIR, filename);
   const raw = fs.readFileSync(filepath, 'utf-8');
   const { data, content } = parseFrontmatter(raw);
+
+  const resolvedName = data.name || stripMdExtension(filename);
+
+  // Log execution for skill recency monitoring
+  _logSkillExecution(resolvedName);
+
   return {
-    name: data.name || stripMdExtension(filename),
+    name: resolvedName,
     description: data.description || '',
     immutable: false,
     content,
   };
+}
+
+/**
+ * Record a skill execution in the skill_executions table.
+ * Silently swallowed on any error — logging must never break skill reads.
+ *
+ * @param {string} skillName
+ */
+function _logSkillExecution(skillName) {
+  try {
+    const q = getQuery();
+    const sessionId = getSessionService().getCurrentSessionId();
+    const now = new Date().toISOString();
+    q(
+      `INSERT INTO skill_executions (skill_name, executed_at, session_id) VALUES (?, ?, ?)`,
+      [skillName, now, sessionId]
+    );
+  } catch (_) {
+    // Non-fatal: skill_executions table may not yet exist on first boot
+  }
 }
 
 function writeSkill(name, content) {
@@ -253,6 +324,7 @@ function writeSkill(name, content) {
 
   ensureSkillsDir();
   fs.writeFileSync(filepath, content, 'utf-8');
+  invalidateSkillListCache();
   return { success: true };
 }
 
@@ -265,6 +337,7 @@ function deleteSkill(name) {
 
   const filepath = path.join(SKILLS_DIR, filename);
   fs.unlinkSync(filepath);
+  invalidateSkillListCache();
   return { success: true };
 }
 
