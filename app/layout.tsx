@@ -1,5 +1,6 @@
 import './globals.css';
 import { DimensionIconsProvider } from '@/context/DimensionIconsContext';
+import ExternalNavigationManager from '@/components/system/ExternalNavigationManager';
 
 export const metadata = {
   title: 'RA-H Open Source',
@@ -12,9 +13,34 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var rawTheme = localStorage.getItem('ui.theme');
+                  var theme = 'dark';
+                  if (rawTheme !== null) {
+                    try {
+                      theme = JSON.parse(rawTheme) === 'light' ? 'light' : 'dark';
+                    } catch (parseError) {
+                      theme = rawTheme === 'light' ? 'light' : 'dark';
+                    }
+                  }
+                  document.documentElement.setAttribute('data-theme', theme);
+                } catch (error) {
+                  document.documentElement.setAttribute('data-theme', 'dark');
+                }
+              })();
+            `,
+          }}
+        />
+      </head>
       <body>
         <DimensionIconsProvider>
+          <ExternalNavigationManager />
           {children}
         </DimensionIconsProvider>
       </body>

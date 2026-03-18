@@ -80,6 +80,7 @@ If you want real-time UI updates when nodes are created:
 | `createNode` | Create a new node (title/content/dimensions) |
 | `queryNodes` | Search existing nodes by keyword |
 | `updateNode` | Update an existing node |
+| `deleteNode` | Delete a node by ID |
 | `getNodesById` | Get nodes by ID |
 | `createEdge` | Create relationship between nodes |
 | `updateEdge` | Update an edge explanation |

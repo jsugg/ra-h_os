@@ -468,9 +468,9 @@ function MapPaneInner({
               padding: '6px 10px',
               background: selectedDimension ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
               border: '1px solid',
-              borderColor: selectedDimension ? 'rgba(34, 197, 94, 0.3)' : '#2a2a2a',
+              borderColor: selectedDimension ? 'rgba(34, 197, 94, 0.3)' : 'var(--rah-border-strong)',
               borderRadius: '6px',
-              color: selectedDimension ? '#22c55e' : '#888',
+              color: selectedDimension ? '#22c55e' : 'var(--rah-text-muted)',
               fontSize: '12px',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
@@ -489,8 +489,8 @@ function MapPaneInner({
               top: '100%',
               left: 0,
               marginTop: '4px',
-              background: '#1a1a1a',
-              border: '1px solid #2a2a2a',
+              background: 'var(--rah-bg-active)',
+              border: '1px solid var(--rah-border-strong)',
               borderRadius: '8px',
               padding: '4px',
               minWidth: '180px',
@@ -503,9 +503,9 @@ function MapPaneInner({
                 onClick={() => { setSelectedDimension(null); setDimensionDropdownOpen(false); }}
                 style={{
                   display: 'flex', alignItems: 'center', width: '100%', padding: '8px 12px',
-                  background: !selectedDimension ? '#2a2a2a' : 'transparent',
+                  background: !selectedDimension ? 'var(--rah-bg-active)' : 'transparent',
                   border: 'none', borderRadius: '4px',
-                  color: !selectedDimension ? '#fff' : '#888',
+                  color: !selectedDimension ? 'var(--rah-text-active)' : 'var(--rah-text-muted)',
                   fontSize: '12px', cursor: 'pointer', textAlign: 'left',
                 }}
               >
@@ -519,21 +519,21 @@ function MapPaneInner({
                   onClick={() => { setSelectedDimension(dim.dimension); setDimensionDropdownOpen(false); }}
                   style={{
                     display: 'flex', alignItems: 'center', width: '100%', padding: '8px 12px',
-                    background: selectedDimension === dim.dimension ? '#2a2a2a' : 'transparent',
+                    background: selectedDimension === dim.dimension ? 'var(--rah-bg-active)' : 'transparent',
                     border: 'none', borderRadius: '4px',
-                    color: selectedDimension === dim.dimension ? '#fff' : '#888',
+                    color: selectedDimension === dim.dimension ? 'var(--rah-text-active)' : 'var(--rah-text-muted)',
                     fontSize: '12px', cursor: 'pointer', textAlign: 'left',
                   }}
                   onMouseEnter={e => {
                     if (selectedDimension !== dim.dimension) {
-                      e.currentTarget.style.background = '#222';
-                      e.currentTarget.style.color = '#ccc';
+                      e.currentTarget.style.background = 'var(--rah-bg-active)';
+                      e.currentTarget.style.color = 'var(--rah-text-secondary)';
                     }
                   }}
                   onMouseLeave={e => {
                     if (selectedDimension !== dim.dimension) {
                       e.currentTarget.style.background = 'transparent';
-                      e.currentTarget.style.color = '#888';
+                      e.currentTarget.style.color = 'var(--rah-text-muted)';
                     }
                   }}
                 >
@@ -547,9 +547,9 @@ function MapPaneInner({
       </PaneHeader>
 
       {/* Map content */}
-      <div style={{ position: 'relative', flex: 1, background: '#080808' }}>
+      <div style={{ position: 'relative', flex: 1, background: 'var(--rah-bg-base)' }}>
         {loading ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--rah-text-muted)' }}>
             Loading map...
           </div>
         ) : error ? (
@@ -557,7 +557,7 @@ function MapPaneInner({
             {error}
           </div>
         ) : rfNodes.length === 0 ? (
-          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--rah-text-muted)' }}>
             No nodes to display
           </div>
         ) : (
@@ -581,12 +581,12 @@ function MapPaneInner({
               proOptions={{ hideAttribution: true }}
               colorMode="dark"
             >
-              <Background color="#1a1a1a" gap={40} size={1} />
+              <Background color="var(--rah-border)" gap={40} size={1} />
               <MiniMap
-                style={{ background: '#0a0a0a', border: '1px solid #1f1f1f', borderRadius: 6 }}
-                maskColor="rgba(0,0,0,0.6)"
-                nodeColor={(n) => {
-                  const data = n.data as RahNodeData | undefined;
+                style={{ background: 'var(--rah-bg-base)', border: '1px solid var(--rah-bg-active)', borderRadius: 6 }}
+                maskColor="rgba(0, 0, 0, 0.7)"
+                nodeColor={(node) => {
+                  const data = node.data as RahNodeData | undefined;
                   return data?.primaryDimensionColor || '#374151';
                 }}
                 pannable
@@ -598,17 +598,17 @@ function MapPaneInner({
             {selectedDbNode && (
               <div style={infoPanel}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 8 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#e5e7eb' }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--rah-text-base)' }}>
                     {selectedDbNode.title || 'Untitled'}
                   </div>
                   <button
                     onClick={() => setSelectedNodeId(null)}
-                    style={{ background: 'none', border: 'none', color: '#666', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
+                    style={{ background: 'none', border: 'none', color: 'var(--rah-text-muted)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}
                   >
                     &times;
                   </button>
                 </div>
-                <div style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+                <div style={{ fontSize: 12, color: 'var(--rah-text-muted)', marginBottom: 8 }}>
                   {connectedNodeIds.size} connected nodes
                 </div>
                 <div style={{ fontSize: 11, color: '#22c55e', marginBottom: 8 }}>
@@ -621,8 +621,8 @@ function MapPaneInner({
                         key={dim}
                         style={{
                           padding: '2px 8px', borderRadius: 999, fontSize: 11,
-                          background: lockedDimensionNames.has(dim) ? '#132018' : '#1a1a1a',
-                          color: lockedDimensionNames.has(dim) ? '#86efac' : '#888',
+                          background: lockedDimensionNames.has(dim) ? '#132018' : 'var(--rah-bg-active)',
+                          color: lockedDimensionNames.has(dim) ? '#86efac' : 'var(--rah-text-muted)',
                         }}
                       >
                         {dim}
@@ -673,8 +673,8 @@ const infoPanel: CSSProperties = {
   bottom: 16,
   left: 16,
   width: 260,
-  background: '#0a0a0a',
-  border: '1px solid #1f1f1f',
+  background: 'var(--rah-bg-base)',
+  border: '1px solid var(--rah-bg-active)',
   borderRadius: 8,
   padding: 14,
   zIndex: 10,

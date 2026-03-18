@@ -3,6 +3,7 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { openExternalUrl, shouldOpenExternally } from '@/utils/openExternalUrl';
 
 interface NodeLabelInlineProps {
   id: string;
@@ -192,8 +193,17 @@ export default function MarkdownWithNodeTokens({ content, onNodeClick }: Markdow
         a: ({ href, children }) => (
           <a
             href={href}
-            target="_blank"
-            rel="noopener noreferrer"
+            onClick={(event) => {
+              if (!href || !shouldOpenExternally(href)) {
+                return;
+              }
+
+              event.preventDefault();
+              void openExternalUrl(href).catch((error) => {
+                console.error('[MarkdownWithNodeTokens] Failed to open external link', error);
+                window.alert(`Unable to open ${href}`);
+              });
+            }}
             style={{ color: '#22c55e', textDecoration: 'underline' }}
           >
             {processChildren(children, 'a')}

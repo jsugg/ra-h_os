@@ -8,6 +8,7 @@ import { parseNodeMarkers } from '@/tools/infrastructure/nodeFormatter';
 import { Node, NodeConnection, Chunk } from '@/types/database';
 import DimensionTags from './dimensions/DimensionTags';
 import { getNodeIcon } from '@/utils/nodeIcons';
+import { openExternalUrl, shouldOpenExternally } from '@/utils/openExternalUrl';
 import { useDimensionIcons } from '@/context/DimensionIconsContext';
 import ConfirmDialog from '../common/ConfirmDialog';
 import { SourceReader } from './source';
@@ -1840,7 +1841,19 @@ export default function FocusPanel({ openTabs, activeTab, onTabSelect, onNodeCli
                       if (e.metaKey || e.ctrlKey) {
                         e.preventDefault();
                         startEdit('link', nodesData[activeTab].link || '');
+                        return;
                       }
+
+                      const link = nodesData[activeTab].link;
+                      if (!link || !shouldOpenExternally(link)) {
+                        return;
+                      }
+
+                      e.preventDefault();
+                      void openExternalUrl(link).catch((error) => {
+                        console.error('[FocusPanel] Failed to open node link', error);
+                        window.alert(`Unable to open ${link}`);
+                      });
                     }}
                     style={{
                       color: '#3b82f6',

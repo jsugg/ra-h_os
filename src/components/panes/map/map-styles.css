@@ -1,7 +1,7 @@
 /* React Flow dark theme overrides for RA-H Map */
 
 .rah-map-wrapper .react-flow__background {
-  background: #080808 !important;
+  background: var(--rah-bg-base) !important;
 }
 
 .rah-map-wrapper .react-flow__pane {
@@ -48,11 +48,11 @@
 
 /* Custom node styles */
 .rah-map-node {
-  background: #0f0f0f;
-  border: 1px solid #2a2a2a;
+  background: var(--rah-bg-surface);
+  border: 1px solid var(--rah-border-strong);
   border-radius: 8px;
   padding: 8px 12px;
-  color: #e5e7eb;
+  color: var(--rah-text-base);
   font-size: 12px;
   min-width: 60px;
   max-width: 180px;
@@ -61,7 +61,7 @@
 }
 
 .rah-map-node:hover {
-  border-color: #3a3a3a;
+  border-color: var(--rah-border-stronger);
 }
 
 .rah-map-node--selected {
@@ -71,12 +71,12 @@
 
 .rah-map-node--top {
   border-color: #166534;
-  background: #0a1a0f;
+  background: var(--rah-accent-green-soft);
 }
 
 .rah-map-node--expanded {
   border-color: #b45309;
-  background: #1a150a;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .rah-map-node--expanded .rah-map-node__title {
@@ -103,7 +103,7 @@
 .rah-map-node__dims {
   margin-top: 4px;
   font-size: 10px;
-  color: #a1a1aa;
+  color: var(--rah-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -114,7 +114,7 @@
   width: 8px !important;
   height: 8px !important;
   background: #22c55e !important;
-  border: 2px solid #0f0f0f !important;
+  border: 2px solid var(--rah-bg-surface) !important;
   opacity: 0;
   transition: opacity 0.15s ease;
 }
@@ -142,7 +142,7 @@
 
 /* MiniMap dark theme */
 .rah-map-wrapper .react-flow__minimap {
-  background: #0a0a0a;
-  border: 1px solid #1f1f1f;
+  background: var(--rah-bg-base);
+  border: 1px solid var(--rah-bg-active);
   border-radius: 6px;
 }
