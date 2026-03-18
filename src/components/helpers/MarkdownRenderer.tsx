@@ -81,7 +81,7 @@ function renderTextWithFormatting(text: string, onNodeClick?: (nodeId: number) =
             fontSize: 24, 
             color: '#3a3a3a',
             lineHeight: 1
-          }}>"</span>
+          }}>&quot;</span>
           <div style={{ paddingLeft: 12 }}>
             {parseInlineFormatting(segment.text, onNodeClick)}
           </div>

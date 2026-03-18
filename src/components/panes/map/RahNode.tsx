@@ -3,7 +3,6 @@
 import { memo } from 'react';
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react';
 import type { RahNodeData } from './utils';
-import { LABEL_THRESHOLD } from './utils';
 import { getNodeIcon } from '@/utils/nodeIcons';
 
 type RahNodeType = Node<RahNodeData, 'rahNode'>;

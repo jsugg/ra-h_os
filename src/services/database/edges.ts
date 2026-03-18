@@ -8,6 +8,53 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { z } from 'zod';
 import { validateEdgeExplanation } from './quality';
 
+type EdgeRow = Edge;
+
+type NodeConnectionRow = {
+  id: number;
+  from_node_id: number;
+  to_node_id: number;
+  context: unknown;
+  source: Edge['source'];
+  created_at: string;
+  connected_node_id: number;
+  connected_node_title: string;
+  connected_node_notes: string | null;
+  connected_node_link: string | null;
+  connected_node_chunk: string | null;
+  connected_node_metadata: Record<string, unknown> | string | null;
+  connected_node_created_at: string;
+  connected_node_updated_at: string;
+  connected_node_dimensions_json: string;
+};
+
+function parseContextValue(context: unknown): Edge['context'] {
+  if (typeof context === 'string') {
+    try {
+      const parsed = JSON.parse(context);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : { raw: context };
+    } catch {
+      return { raw: context };
+    }
+  }
+
+  if (context && typeof context === 'object' && !Array.isArray(context)) {
+    return context as Record<string, unknown>;
+  }
+
+  return null;
+}
+
+function parseMetadataValue(metadata: unknown): Record<string, unknown> | null {
+  const parsed = parseContextValue(metadata);
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    return parsed as Record<string, unknown>;
+  }
+  return null;
+}
+
 const inferredEdgeContextSchema = z.object({
   type: z.enum(['created_by', 'part_of', 'source_of', 'related_to']),
   confidence: z.number().min(0).max(1),
@@ -207,33 +254,15 @@ export class EdgeService {
   async getEdges(): Promise<Edge[]> {
     const sqlite = getSQLiteClient();
     const result = sqlite.query<Edge>('SELECT * FROM edges ORDER BY created_at DESC');
-    return result.rows.map((row: any) => {
-      let context: any = row.context;
-      if (typeof context === 'string') {
-        try {
-          context = JSON.parse(context);
-        } catch {
-          // Keep raw context string if JSON parsing fails.
-        }
-      }
-      return { ...row, context };
-    });
+    return result.rows.map((row: EdgeRow) => ({ ...row, context: parseContextValue(row.context) }));
   }
 
   async getEdgeById(id: number): Promise<Edge | null> {
     const sqlite = getSQLiteClient();
     const result = sqlite.query<Edge>('SELECT * FROM edges WHERE id = ?', [id]);
-    const row: any = result.rows[0];
+    const row = result.rows[0] as EdgeRow | undefined;
     if (!row) return null;
-    let context: any = row.context;
-    if (typeof context === 'string') {
-      try {
-        context = JSON.parse(context);
-      } catch {
-        // Keep raw context string if JSON parsing fails.
-      }
-    }
-    return { ...row, context };
+    return { ...row, context: parseContextValue(row.context) };
   }
 
   async createEdge(edgeData: EdgeData): Promise<Edge> {
@@ -324,16 +353,16 @@ export class EdgeService {
     return newEdge;
   }
 
-  async updateEdge(id: number, updates: Partial<Edge>): Promise<Edge> {
+  async updateEdge(id: number, updates: Partial<Edge> & { explanation?: string }): Promise<Edge> {
     return this.updateEdgeSQLite(id, updates);
   }
 
   // PostgreSQL path removed in SQLite-only consolidation
 
-  private async updateEdgeSQLite(id: number, updates: Partial<Edge>): Promise<Edge> {
+  private async updateEdgeSQLite(id: number, updates: Partial<Edge> & { explanation?: string }): Promise<Edge> {
     const sqlite = getSQLiteClient();
     const updateFields: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     // If explanation changes, re-infer classification and write full EdgeContext
     if (Object.prototype.hasOwnProperty.call(updates, 'context') && updates.context && typeof updates.context === 'object') {
@@ -405,7 +434,7 @@ export class EdgeService {
     });
 
     if (Object.prototype.hasOwnProperty.call(updates, 'explanation')) {
-      const rawExplanation = (updates as any).explanation;
+      const rawExplanation = updates.explanation;
       if (typeof rawExplanation === 'string') {
         const explanationError = validateEdgeExplanation(rawExplanation);
         if (explanationError) {
@@ -466,7 +495,7 @@ export class EdgeService {
 
   private async getNodeConnectionsSQLite(nodeId: number): Promise<NodeConnection[]> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query(`
+    const result = sqlite.query<NodeConnectionRow>(`
       SELECT 
         e.*,
         CASE 
@@ -533,13 +562,13 @@ export class EdgeService {
     return this.mapNodeConnectionsSQLite(result.rows);
   }
 
-  private mapNodeConnections(rows: any[]): NodeConnection[] {
+  private mapNodeConnections(rows: NodeConnectionRow[]): NodeConnection[] {
     return rows.map(row => {
       const edge: Edge = {
         id: row.id,
         from_node_id: row.from_node_id,
         to_node_id: row.to_node_id,
-        context: row.context,
+        context: parseContextValue(row.context),
         source: row.source,
         created_at: row.created_at
       };
@@ -547,12 +576,14 @@ export class EdgeService {
       const connected_node: Node = {
         id: row.connected_node_id,
         title: row.connected_node_title,
-        notes: row.connected_node_notes,
-        link: row.connected_node_link,
-        dimensions: row.connected_node_dimensions,
+        notes: row.connected_node_notes ?? undefined,
+        link: row.connected_node_link ?? undefined,
+        dimensions: JSON.parse(row.connected_node_dimensions_json || '[]'),
         embedding: undefined, // Not needed for display
-        chunk: row.connected_node_chunk,
-        metadata: row.connected_node_metadata,
+        chunk: row.connected_node_chunk ?? undefined,
+        metadata: typeof row.connected_node_metadata === 'string'
+          ? parseMetadataValue(row.connected_node_metadata)
+          : (row.connected_node_metadata ?? null),
         created_at: row.connected_node_created_at,
         updated_at: row.connected_node_updated_at
       };
@@ -565,20 +596,9 @@ export class EdgeService {
     });
   }
 
-  private mapNodeConnectionsSQLite(rows: any[]): NodeConnection[] {
+  private mapNodeConnectionsSQLite(rows: NodeConnectionRow[]): NodeConnection[] {
     return rows.map(row => {
-      let context: any = row.context;
-      if (typeof row.context === 'string') {
-        const trimmed = row.context.trim();
-        if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-          try {
-            context = JSON.parse(trimmed);
-          } catch (error) {
-            console.warn('[edges] Failed to parse JSON context for edge', row.id, error);
-            context = row.context;
-          }
-        }
-      }
+      const context = parseContextValue(row.context);
 
       const edge: Edge = {
         id: row.id,
@@ -592,12 +612,14 @@ export class EdgeService {
       const connected_node: Node = {
         id: row.connected_node_id,
         title: row.connected_node_title,
-        notes: row.connected_node_notes,
-        link: row.connected_node_link,
+        notes: row.connected_node_notes ?? undefined,
+        link: row.connected_node_link ?? undefined,
         dimensions: JSON.parse(row.connected_node_dimensions_json || '[]'),
         embedding: undefined, // Not needed for display
-        chunk: row.connected_node_chunk,
-        metadata: typeof row.connected_node_metadata === 'string' ? JSON.parse(row.connected_node_metadata) : row.connected_node_metadata,
+        chunk: row.connected_node_chunk ?? undefined,
+        metadata: typeof row.connected_node_metadata === 'string'
+          ? parseMetadataValue(row.connected_node_metadata)
+          : (row.connected_node_metadata ?? null),
         created_at: row.connected_node_created_at,
         updated_at: row.connected_node_updated_at
       };
@@ -618,14 +640,14 @@ export class EdgeService {
 
   async getEdgeCount(): Promise<number> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query('SELECT COUNT(*) as count FROM edges');
+    const result = sqlite.query<{ count: number }>('SELECT COUNT(*) as count FROM edges');
     return Number(result.rows[0].count);
   }
 
 
   async getMostConnectedNodes(limit = 10): Promise<Array<{ node_id: number; connection_count: number }>> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query(`
+    const result = sqlite.query<{ node_id: number; connection_count: number }>(`
       SELECT 
         node_id,
         COUNT(*) as connection_count
@@ -639,7 +661,7 @@ export class EdgeService {
       LIMIT ?
     `, [limit]);
 
-    return result.rows.map((row: any) => ({
+    return result.rows.map((row) => ({
       node_id: Number(row.node_id),
       connection_count: Number(row.connection_count)
     }));

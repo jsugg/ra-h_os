@@ -22,8 +22,15 @@ import { paperExtractTool } from '../other/paperExtract';
 import { sqliteQueryTool } from '../other/sqliteQuery';
 import { logEvalToolCall } from '@/services/evals/evalsLogger';
 
+type RegisteredTool = Record<string, unknown>;
+
+type ExecutableTool = RegisteredTool & {
+  schema?: unknown;
+  execute: (params: unknown, context: unknown) => Promise<unknown>;
+};
+
 // Core tools available to all agents (read-only graph operations)
-const CORE_TOOLS: Record<string, any> = {
+const CORE_TOOLS: Record<string, RegisteredTool> = {
   sqliteQuery: sqliteQueryTool,
   queryNodes: queryNodesTool,
   getNodesById: getNodesByIdTool,
@@ -34,13 +41,13 @@ const CORE_TOOLS: Record<string, any> = {
   searchContentEmbeddings: searchContentEmbeddingsTool,
 };
 
-const ORCHESTRATION_TOOLS: Record<string, any> = {
+const ORCHESTRATION_TOOLS: Record<string, RegisteredTool> = {
   webSearch: webSearchTool,
   think: thinkTool,
 };
 
 // Execution tools for worker agents (includes write operations)
-const EXECUTION_TOOLS: Record<string, any> = {
+const EXECUTION_TOOLS: Record<string, RegisteredTool> = {
   createNode: createNodeTool,
   updateNode: updateNodeTool,
   createEdge: createEdgeTool,
@@ -59,7 +66,7 @@ export const TOOL_SETS = {
   execution: EXECUTION_TOOLS,
 };
 
-export const TOOLS: Record<string, any> = {
+export const TOOLS: Record<string, RegisteredTool> = {
   ...CORE_TOOLS,
   ...ORCHESTRATION_TOOLS,
   ...EXECUTION_TOOLS,
@@ -100,14 +107,14 @@ const PLANNER_TOOL_NAMES = [
 /**
  * Get tool by ID
  */
-export function getTool(toolId: string): any | null {
+export function getTool(toolId: string): RegisteredTool | null {
   return TOOLS[toolId] || null;
 }
 
 /**
  * Get tools by IDs (for helper's available_tools)
  */
-export function getTools(toolIds: string[]): any[] {
+export function getTools(toolIds: string[]): RegisteredTool[] {
   if (!Array.isArray(toolIds)) {
     console.error('getTools received non-array:', toolIds);
     return [];
@@ -118,7 +125,7 @@ export function getTools(toolIds: string[]): any[] {
 /**
  * Get all available tools
  */
-export function getAllTools(): any[] {
+export function getAllTools(): RegisteredTool[] {
   return Object.values(TOOLS);
 }
 
@@ -133,7 +140,7 @@ export function getToolSchemas(toolIds: string[]) {
  * Get tools for a specific helper by tool names
  * This is the main function used by helper APIs to get their assigned tools
  */
-export function getHelperTools(availableToolNames: string[]): Record<string, any> {
+export function getHelperTools(availableToolNames: string[]): Record<string, RegisteredTool> {
   if (!Array.isArray(availableToolNames)) {
     console.error('getHelperTools received non-array:', availableToolNames);
     return {};
@@ -146,7 +153,7 @@ export function getHelperTools(availableToolNames: string[]): Record<string, any
       console.warn(`Tool '${name}' not found in registry`);
     }
     return tools;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, RegisteredTool>);
 }
 
 export function getDefaultToolNamesForRole(role: 'orchestrator' | 'executor' | 'planner'): string[] {
@@ -159,7 +166,7 @@ export function getDefaultToolNamesForRole(role: 'orchestrator' | 'executor' | '
   return [...EXECUTOR_TOOL_NAMES];
 }
 
-export function getToolsForRole(role: 'orchestrator' | 'executor' | 'planner'): Record<string, any> {
+export function getToolsForRole(role: 'orchestrator' | 'executor' | 'planner'): Record<string, RegisteredTool> {
   const names = getDefaultToolNamesForRole(role);
   return getHelperTools(names);
 }
@@ -167,7 +174,7 @@ export function getToolsForRole(role: 'orchestrator' | 'executor' | 'planner'): 
 /**
  * Get tools by their names (for workflow execution with specific tool sets)
  */
-export function getToolsByNames(toolNames: string[]): Record<string, any> {
+export function getToolsByNames(toolNames: string[]): Record<string, RegisteredTool> {
   if (!Array.isArray(toolNames) || toolNames.length === 0) {
     console.warn('[getToolsByNames] No tool names provided');
     return {};
@@ -178,10 +185,10 @@ export function getToolsByNames(toolNames: string[]): Record<string, any> {
 /**
  * Execute a tool with given parameters and context
  */
-export async function executeTool(toolId: string, params: any, context: any) {
+export async function executeTool(toolId: string, params: unknown, context: unknown) {
   const tool = getTool(toolId);
   
-  if (!tool) {
+  if (!tool || typeof tool.execute !== 'function') {
     return {
       success: false,
       error: `Tool '${toolId}' not found`,
@@ -191,7 +198,8 @@ export async function executeTool(toolId: string, params: any, context: any) {
   
   const startedAt = Date.now();
   try {
-    const result = await tool.execute(params, context);
+    const executableTool = tool as ExecutableTool;
+    const result = await executableTool.execute(params, context);
     logEvalToolCall({
       toolName: toolId,
       args: params,
@@ -214,17 +222,19 @@ export async function executeTool(toolId: string, params: any, context: any) {
   }
 }
 
-function wrapToolForEvalLogging(toolName: string, tool: any) {
+function wrapToolForEvalLogging(toolName: string, tool: RegisteredTool): RegisteredTool {
   if (!tool || typeof tool.execute !== 'function') {
     return tool;
   }
 
+  const executableTool = tool as ExecutableTool;
+
   return {
     ...tool,
-    execute: async (params: any, context: any) => {
+    execute: async (params: unknown, context: unknown) => {
       const startedAt = Date.now();
       try {
-        const result = await tool.execute(params, context);
+        const result = await executableTool.execute(params, context);
         logEvalToolCall({
           toolName,
           args: params,

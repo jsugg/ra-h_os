@@ -1,5 +1,4 @@
 import React from 'react';
-import { Node } from '@/types/database';
 
 // Stub type for delegation (delegation system removed in rah-light)
 export type AgentDelegation = {

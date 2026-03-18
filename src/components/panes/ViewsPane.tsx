@@ -2,7 +2,7 @@
 
 import PaneHeader from './PaneHeader';
 import ViewsOverlay from '../views/ViewsOverlay';
-import type { BasePaneProps, PaneAction, PaneType } from './types';
+import type { BasePaneProps } from './types';
 import type { PendingNode } from '../layout/ThreePanelLayout';
 
 export interface ViewsPaneProps extends BasePaneProps {
@@ -15,8 +15,8 @@ export interface ViewsPaneProps extends BasePaneProps {
 
 export default function ViewsPane({
   slot,
-  isActive,
-  onPaneAction,
+  isActive: _isActive,
+  onPaneAction: _onPaneAction,
   onCollapse,
   onSwapPanes,
   onNodeClick,
@@ -25,10 +25,6 @@ export default function ViewsPane({
   pendingNodes,
   onDismissPending,
 }: ViewsPaneProps) {
-  const handleTypeChange = (type: PaneType) => {
-    onPaneAction?.({ type: 'switch-pane-type', paneType: type });
-  };
-
   return (
     <div style={{
       display: 'flex',

@@ -12,12 +12,49 @@ interface ChatLogEntry {
   helper_name: string;
   agent_type: 'orchestrator' | 'executor' | 'planner';
   delegation_id: number | null;
-  metadata: any;
+  metadata: Record<string, unknown>;
+}
+
+interface ToolCallLogEntry {
+  toolName?: string;
+  args?: unknown;
+  result?: unknown;
+}
+
+interface ToolStepLogEntry {
+  toolCalls?: ToolCallLogEntry[];
+}
+
+interface ChatMessagePart {
+  type?: string;
+  text?: string;
+}
+
+interface ChatMessage {
+  role?: string;
+  content?: unknown;
+  parts?: ChatMessagePart[];
+}
+
+interface StreamResult {
+  text?: string;
+  toolCalls?: ToolCallLogEntry[];
+  steps?: ToolStepLogEntry[];
+}
+
+interface StreamChunk {
+  type?: string;
+  textDelta?: string;
+}
+
+interface StreamConfig {
+  onFinish?: (result: StreamResult) => Promise<void> | void;
+  [key: string]: unknown;
 }
 
 interface StreamMetadata {
   helperName: string;
-  openTabs?: any[];
+  openTabs?: number[];
   activeTabId?: number | null;
   currentView?: 'nodes' | 'memory';
   sessionId?: string;
@@ -31,7 +68,7 @@ interface StreamMetadata {
   modelUsed?: string;
   workflowKey?: string;
   workflowNodeId?: number;
-  toolCallsData?: any[];
+  toolCallsData?: ToolCallLogEntry[];
   backendUsage?: Array<{
     provider: string;
     headers: Record<string, string>;
@@ -60,10 +97,10 @@ function normalizeToolResult(result: unknown): unknown {
   return { value: result };
 }
 
-function collectToolCalls(result: any): any[] | undefined {
-  const collected: any[] = [];
+function collectToolCalls(result: StreamResult): ToolCallLogEntry[] | undefined {
+  const collected: ToolCallLogEntry[] = [];
 
-  const pushCall = (call: any) => {
+  const pushCall = (call: ToolCallLogEntry) => {
     if (!call?.toolName) return;
     collected.push({
       toolName: call.toolName,
@@ -77,7 +114,7 @@ function collectToolCalls(result: any): any[] | undefined {
   }
 
   if (Array.isArray(result?.steps)) {
-    result.steps.forEach((step: any) => {
+    result.steps.forEach((step) => {
       if (Array.isArray(step?.toolCalls)) {
         step.toolCalls.forEach(pushCall);
       }
@@ -89,7 +126,7 @@ function collectToolCalls(result: any): any[] | undefined {
 
 export class ChatLoggingMiddleware {
   private static generateThreadId(helperName: string, metadata: StreamMetadata): string {
-    const { activeTabId = null, currentView, sessionId } = metadata;
+    const { activeTabId = null, currentView: _currentView, sessionId } = metadata;
     const timestamp = Date.now();
     const session = sessionId || `session_${timestamp}`;
 
@@ -99,7 +136,7 @@ export class ChatLoggingMiddleware {
     return `${helperName}-general-${session}`;
   }
 
-  private static extractUserMessage(messages: any[]): string | null {
+  private static extractUserMessage(messages: ChatMessage[]): string | null {
     const userMessages = messages.filter(m => m.role === 'user');
     const lastUserMessage = userMessages[userMessages.length - 1];
     
@@ -113,8 +150,8 @@ export class ChatLoggingMiddleware {
     // Handle parts-based messages (from frontend)
     if (Array.isArray(lastUserMessage.parts)) {
       const textParts = lastUserMessage.parts
-        .filter((part: any) => part.type === 'text')
-        .map((part: any) => part.text);
+        .filter((part): part is ChatMessagePart & { type: 'text'; text: string } => part.type === 'text' && typeof part.text === 'string')
+        .map((part) => part.text);
       return textParts.join(' ');
     }
     
@@ -123,14 +160,18 @@ export class ChatLoggingMiddleware {
       return JSON.stringify(lastUserMessage.content);
     }
     
-    return lastUserMessage.content || null;
+    return typeof lastUserMessage.content === 'string'
+      ? lastUserMessage.content
+      : lastUserMessage.content != null
+        ? JSON.stringify(lastUserMessage.content)
+        : null;
   }
 
   static async logChatInteraction(
     userMessage: string,
     assistantMessage: string,
     metadata: StreamMetadata,
-    messages: any[] = []
+    messages: ChatMessage[] = []
   ): Promise<void> {
     try {
       const threadId = this.generateThreadId(metadata.helperName, metadata);
@@ -178,7 +219,7 @@ export class ChatLoggingMiddleware {
           ...((metadata.toolCallsData && metadata.toolCallsData.length > 0) ? {
             tools_used: metadata.usageData?.toolsUsed ?? Array.from(new Set(
               metadata.toolCallsData
-                .map((call: any) => call?.toolName)
+                .map((call) => call?.toolName)
                 .filter((toolName: unknown): toolName is string => typeof toolName === 'string' && toolName.length > 0)
             )),
             tool_calls_count: metadata.usageData?.toolCallsCount ?? metadata.toolCallsData.length,
@@ -236,7 +277,7 @@ export class ChatLoggingMiddleware {
     }
   }
 
-  static createLoggingHandlers(metadata: StreamMetadata, messages: any[]) {
+  static createLoggingHandlers(metadata: StreamMetadata, messages: ChatMessage[]) {
     let assistantResponse = '';
     const userMessage = this.extractUserMessage(messages);
     const startedAt = metadata.requestStartedAt ?? Date.now();
@@ -246,10 +287,14 @@ export class ChatLoggingMiddleware {
     let firstChunkAt: number | null = null;
 
     return {
-      onFinish: async (result: any) => {
+      onFinish: async (result: StreamResult) => {
         const { text, toolCalls, steps } = result;
         // Log if we have a user message and either text OR tool activity
-        const hasActivity = Boolean(text || toolCalls?.length > 0 || steps?.length > 0);
+        const hasActivity = Boolean(
+          text ||
+          (Array.isArray(toolCalls) && toolCalls.length > 0) ||
+          (Array.isArray(steps) && steps.length > 0)
+        );
         
         if (userMessage && hasActivity) {
           // Capture tool calls if present
@@ -330,7 +375,7 @@ export class ChatLoggingMiddleware {
               evalMetadata.toolCallsData
                 ? Array.from(new Set(
                     evalMetadata.toolCallsData
-                      .map((call: any) => call?.toolName)
+                      .map((call) => call?.toolName)
                       .filter((toolName: unknown): toolName is string => typeof toolName === 'string' && toolName.length > 0)
                   ))
                 : null
@@ -341,7 +386,7 @@ export class ChatLoggingMiddleware {
           });
         }
       },
-      onChunk: ({ chunk }: { chunk: any }) => {
+      onChunk: ({ chunk }: { chunk: StreamChunk }) => {
         if (firstChunkAt === null) {
           firstChunkAt = Date.now();
         }
@@ -357,16 +402,16 @@ export class ChatLoggingMiddleware {
 }
 
 export function withChatLogging(
-  streamConfig: any,
+  streamConfig: StreamConfig,
   metadata: StreamMetadata,
-  messages: any[]
+  messages: ChatMessage[]
 ) {
   const handlers = ChatLoggingMiddleware.createLoggingHandlers(metadata, messages);
   const originalOnFinish = streamConfig.onFinish;
   
   return {
     ...streamConfig,
-    onFinish: async (result: any) => {
+    onFinish: async (result: StreamResult) => {
       // Call original onFinish first (for cache stats)
       if (originalOnFinish) {
         await originalOnFinish(result);

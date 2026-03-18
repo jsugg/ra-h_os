@@ -172,7 +172,7 @@ Focus on the main concepts, key relationships, and practical implications.`;
     const { nodeId, forceReEmbed = false, verbose = false } = options;
     
     let query: string;
-    let params: any[] = [];
+    let params: unknown[] = [];
     
     if (nodeId) {
       // Single node
@@ -224,7 +224,7 @@ Focus on the main concepts, key relationships, and practical implications.`;
       async (node) => {
         try {
           await this.embedNode(node, forceReEmbed);
-        } catch (error) {
+        } catch (_error) {
           // Error already logged in embedNode
         }
       },

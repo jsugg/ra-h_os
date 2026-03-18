@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import FocusPanel from '@/components/focus/FocusPanel';
 import PaneHeader from './PaneHeader';
-import { NodePaneProps, PaneType } from './types';
+import { NodePaneProps } from './types';
 
 // Simple truncate for tab titles
 function truncateTitle(title: string, maxLength = 20): string {
@@ -13,8 +13,8 @@ function truncateTitle(title: string, maxLength = 20): string {
 
 export default function NodePane({
   slot,
-  isActive,
-  onPaneAction,
+  isActive: _isActive,
+  onPaneAction: _onPaneAction,
   onCollapse,
   onSwapPanes,
   openTabs,
@@ -31,10 +31,6 @@ export default function NodePane({
   const [nodeTitles, setNodeTitles] = useState<Record<number, string>>({});
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; tabId: number } | null>(null);
   const fetchedRef = useRef<Set<number>>(new Set());
-
-  const handleTypeChange = (type: PaneType) => {
-    onPaneAction?.({ type: 'switch-pane-type', paneType: type });
-  };
 
   // Fetch node titles for tabs
   useEffect(() => {

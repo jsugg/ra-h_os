@@ -2,11 +2,11 @@
 
 import FolderViewOverlay from '@/components/nodes/FolderViewOverlay';
 import PaneHeader from './PaneHeader';
-import { DimensionsPaneProps, PaneType } from './types';
+import { DimensionsPaneProps } from './types';
 
 export default function DimensionsPane({
   slot,
-  isActive,
+  isActive: _isActive,
   onPaneAction,
   onCollapse,
   onSwapPanes,
@@ -15,10 +15,6 @@ export default function DimensionsPane({
   onDataChanged,
   onDimensionSelect,
 }: DimensionsPaneProps) {
-  const handleTypeChange = (type: PaneType) => {
-    onPaneAction?.({ type: 'switch-pane-type', paneType: type });
-  };
-
   // When used as a pane, "close" means switch back to node view
   const handleClose = () => {
     onPaneAction?.({ type: 'switch-pane-type', paneType: 'node' });

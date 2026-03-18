@@ -8,10 +8,14 @@ export interface SQLiteConfig {
   vecExtensionPath: string;
 }
 
-export interface SQLiteQueryResult<T = any> {
+export interface SQLiteQueryResult<T = unknown> {
   rows: T[];
   changes?: number;
   lastInsertRowid?: number;
+}
+
+interface TableInfoRow {
+  name: string;
 }
 
 // Prevent Next.js from re-creating the SQLiteClient across lazy-compiled route module
@@ -19,7 +23,6 @@ export interface SQLiteQueryResult<T = any> {
 // so module-level statics are undefined in every new context. Storing the instance on
 // globalThis survives HMR module evictions and ensures a single DB connection per process.
 declare global {
-  // eslint-disable-next-line no-var
   var __rahSqliteClient: SQLiteClient | undefined;
 }
 
@@ -108,9 +111,9 @@ class SQLiteClient {
     return SQLiteClient.instance;
   }
 
-  public query<T extends Record<string, any> = any>(
+  public query<T = unknown>(
     sql: string, 
-    params?: any[]
+    params?: unknown[]
   ): SQLiteQueryResult<T> {
     try {
       const sqlLower = sql.trim().toLowerCase();
@@ -148,7 +151,7 @@ class SQLiteClient {
       throw {
         message: 'SQLite client is read-only',
         code: 'SQLITE_READONLY',
-        details: 'Transactions are not allowed in read-only mode'
+        details: { reason: 'Transactions are not allowed in read-only mode' }
       } as DatabaseError;
     }
     // Proactively validate/repair vec vtables before any write transaction
@@ -183,7 +186,7 @@ class SQLiteClient {
 
   public async checkTables(): Promise<string[]> {
     try {
-      const result = this.query(
+      const result = this.query<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
       );
       return result.rows.map(row => row.name);
@@ -455,7 +458,7 @@ class SQLiteClient {
       // 6) Clean up removed chat_memory_state table
       try {
         this.db.exec(`DROP TABLE IF EXISTS chat_memory_state;`);
-      } catch (e) {
+      } catch (_error) {
         // Ignore if table doesn't exist
       }
 
@@ -478,7 +481,7 @@ class SQLiteClient {
 
       // 7) Ensure agents table schema (backward compatibility)
       try {
-        const agentCols = this.db.prepare('PRAGMA table_info(agents)').all() as any[];
+        const agentCols = this.db.prepare('PRAGMA table_info(agents)').all() as TableInfoRow[];
         if (agentCols.length) {
           const hasKey = agentCols.some(col => col.name === 'key');
           const hasComponentKey = agentCols.some(col => col.name === 'component_key');
@@ -503,8 +506,8 @@ class SQLiteClient {
       // 8) Ensure chats schema (remove legacy focused_memory_id, ensure agent columns)
       if (hasChats) {
         try {
-          let chatCols = this.db.prepare('PRAGMA table_info(chats)').all() as any[];
-          const hasFocusedMemoryId = chatCols.some((c: any) => c.name === 'focused_memory_id');
+          let chatCols = this.db.prepare('PRAGMA table_info(chats)').all() as TableInfoRow[];
+          const hasFocusedMemoryId = chatCols.some((c) => c.name === 'focused_memory_id');
           if (hasFocusedMemoryId) {
             console.log('Removing legacy chats.focused_memory_id column');
             let flippedForeignKeys = false;
@@ -549,13 +552,13 @@ class SQLiteClient {
                 try { this.db.exec('PRAGMA foreign_keys=ON;'); } catch {}
               }
             }
-            chatCols = this.db.prepare('PRAGMA table_info(chats)').all() as any[];
+            chatCols = this.db.prepare('PRAGMA table_info(chats)').all() as TableInfoRow[];
           }
 
           this.db.exec("CREATE INDEX IF NOT EXISTS idx_chats_thread ON chats(thread_id);");
 
           const ensureCol = (name: string, ddl: string) => {
-            if (!chatCols.some((c: any) => c.name === name)) {
+            if (!chatCols.some((c) => c.name === name)) {
               try { this.db.exec(ddl); } catch (colErr) { console.warn(`Failed to add chats.${name}`, colErr); }
             }
           };
@@ -568,9 +571,9 @@ class SQLiteClient {
 
       try {
         const chatColsPost = hasChats
-          ? this.db.prepare('PRAGMA table_info(chats)').all() as any[]
+          ? this.db.prepare('PRAGMA table_info(chats)').all() as TableInfoRow[]
           : [];
-        const stillHasFocusedMemoryId = chatColsPost.some((c: any) => c.name === 'focused_memory_id');
+        const stillHasFocusedMemoryId = chatColsPost.some((c) => c.name === 'focused_memory_id');
         if (stillHasFocusedMemoryId) {
           console.warn('Skipping legacy memory table drop because chats.focused_memory_id is still present.');
         } else {
@@ -706,9 +709,11 @@ class SQLiteClient {
     const tryRead = (table: string) => {
       try {
         this.db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get();
-      } catch (e: any) {
-        const msg = String(e?.message || '');
-        const code = (e && e.code) ? String(e.code) : '';
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? String(error.message || '') : '';
+        const code = typeof error === 'object' && error !== null && 'code' in error
+          ? String((error as { code?: unknown }).code ?? '')
+          : '';
         if (code === 'SQLITE_CORRUPT_VTAB' || msg.includes('database disk image is malformed') || msg.includes('CORRUPT_VTAB')) {
           console.warn(`Detected corrupted virtual table ${table} (${code || 'error'}). Recreating...`);
           try {
@@ -724,9 +729,7 @@ class SQLiteClient {
             console.error(`Failed to recreate ${table}:`, re);
           }
         } else {
-          // Other errors should bubble up normally
-          // eslint-disable-next-line no-unsafe-finally
-          throw e;
+          throw error;
         }
       }
     };
@@ -735,11 +738,23 @@ class SQLiteClient {
     tryRead('vec_chunks');
   }
 
-  private handleError(error: any): DatabaseError {
+  private handleError(error: unknown): DatabaseError {
+    if (error instanceof Error) {
+      const sqliteError = error as Error & { code?: string };
+      return {
+        message: sqliteError.message || 'SQLite operation failed',
+        code: sqliteError.code || 'SQLITE_ERROR',
+        details: {
+          name: sqliteError.name,
+          stack: sqliteError.stack ?? null
+        }
+      };
+    }
+
     return {
-      message: error.message || 'SQLite operation failed',
-      code: error.code || 'SQLITE_ERROR',
-      details: error
+      message: 'SQLite operation failed',
+      code: 'SQLITE_ERROR',
+      details: { value: String(error) }
     };
   }
 

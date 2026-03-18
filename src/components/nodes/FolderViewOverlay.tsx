@@ -41,9 +41,9 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
   const [deletingDimension, setDeletingDimension] = useState<string | null>(null);
   const [dimensionPendingDelete, setDimensionPendingDelete] = useState<string | null>(null);
   const [dragHoverDimension, setDragHoverDimension] = useState<string | null>(null);
-  const [editingDescription, setEditingDescription] = useState<boolean>(false);
+  const [_editingDescription, setEditingDescription] = useState<boolean>(false);
   const [editDescriptionText, setEditDescriptionText] = useState('');
-  const [editingDimensionName, setEditingDimensionName] = useState<boolean>(false);
+  const [_editingDimensionName, setEditingDimensionName] = useState<boolean>(false);
   const [editDimensionNameText, setEditDimensionNameText] = useState('');
   const [showAddDimensionDialog, setShowAddDimensionDialog] = useState(false);
   const draggedNodeRef = useRef<{ id: number; title?: string; dimensions?: string[] } | null>(null);
@@ -62,12 +62,12 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
   const [kanbanSearchQuery, setKanbanSearchQuery] = useState('');
 
   // Kanban drag-and-drop state
-  const [draggedNode, setDraggedNode] = useState<{ id: number; fromDimension: string } | null>(null);
-  const [dropTargetDimension, setDropTargetDimension] = useState<string | null>(null);
+  const [_draggedNode, _setDraggedNode] = useState<{ id: number; fromDimension: string } | null>(null);
+  const [_dropTargetDimension, _setDropTargetDimension] = useState<string | null>(null);
 
   // Kanban column reordering state
-  const [draggedColumn, setDraggedColumn] = useState<string | null>(null);
-  const [columnDropTarget, setColumnDropTarget] = useState<string | null>(null);
+  const [_draggedColumn, _setDraggedColumn] = useState<string | null>(null);
+  const [_columnDropTarget, _setColumnDropTarget] = useState<string | null>(null);
 
   // Node priority ordering within dimensions (persisted)
   const [dimensionOrders, setDimensionOrders] = usePersistentState<Record<string, number[]>>('ui.dimensionOrders', {});
@@ -81,15 +81,14 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
   const [editModalDescription, setEditModalDescription] = useState('');
   const [editModalIcon, setEditModalIcon] = useState('Folder');
   const [savingDimensionEdit, setSavingDimensionEdit] = useState(false);
-  const [editModalNameError, setEditModalNameError] = useState('');
+  const [_editModalNameError, setEditModalNameError] = useState('');
 
   // Within-dimension reorder drag state
-  const [reorderDrag, setReorderDrag] = useState<{ nodeId: number; dimension: string; index: number } | null>(null);
-  const [reorderDropIndex, setReorderDropIndex] = useState<number | null>(null);
+  const [_reorderDrag, setReorderDrag] = useState<{ nodeId: number; dimension: string; index: number } | null>(null);
+  const [_reorderDropIndex, setReorderDropIndex] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDimensions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -108,7 +107,7 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
   }, [selectedDimension?.dimension]);
 
   // Sort nodes by their priority order within a dimension
-  const sortNodesByDimensionOrder = (nodes: Node[], dimension: string): Node[] => {
+  const _sortNodesByDimensionOrder = (nodes: Node[], dimension: string): Node[] => {
     const order = dimensionOrders[dimension] || [];
     return [...nodes].sort((a, b) => {
       const aIndex = order.indexOf(a.id);
@@ -123,7 +122,7 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
   };
 
   // Handle reordering a node within a dimension
-  const handleReorderDrop = (dimension: string, fromIndex: number, toIndex: number, nodes: Node[]) => {
+  const _handleReorderDrop = (dimension: string, fromIndex: number, toIndex: number, nodes: Node[]) => {
     if (fromIndex === toIndex) return;
 
     // Get current order or create from current node order
@@ -408,13 +407,13 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
     return `${trimmed.slice(0, 160)}…`;
   };
 
-  const handleEditDescription = () => {
+  const _handleEditDescription = () => {
     if (!selectedDimension) return;
     setEditingDescription(true);
     setEditDescriptionText(selectedDimension.description || '');
   };
 
-  const handleSaveDescription = async () => {
+  const _handleSaveDescription = async () => {
     if (!selectedDimension) return;
 
     try {
@@ -445,7 +444,7 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
     }
   };
 
-  const handleCancelDescription = () => {
+  const _handleCancelDescription = () => {
     setEditingDescription(false);
     setEditDescriptionText('');
   };
@@ -529,13 +528,13 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
     }
   };
 
-  const handleEditDimensionName = () => {
+  const _handleEditDimensionName = () => {
     if (!selectedDimension) return;
     setEditingDimensionName(true);
     setEditDimensionNameText(selectedDimension.dimension);
   };
 
-  const handleSaveDimensionName = async () => {
+  const _handleSaveDimensionName = async () => {
     if (!selectedDimension || !editDimensionNameText.trim()) return;
 
     const newName = editDimensionNameText.trim();
@@ -1064,7 +1063,7 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
     </div>
   );
 
-  const renderListContent = () => (
+  const _renderListContent = () => (
     <div
       style={{
         flex: 1,
@@ -1217,7 +1216,7 @@ export default function FolderViewOverlay({ onClose, onNodeOpen, refreshToken, o
     </div>
   );
 
-  const renderKanbanContent = () => (
+  const _renderKanbanContent = () => (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       {/* Kanban Column Setup Bar */}
       <div style={{

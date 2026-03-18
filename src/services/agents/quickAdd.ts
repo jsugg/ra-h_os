@@ -354,13 +354,12 @@ export async function enqueueQuickAdd({ rawInput, mode, description }: QuickAddI
   // Run async - fire and forget
   setImmediate(async () => {
     try {
-      let summary: string;
       if (inputType === 'note') {
-        summary = await handleNoteQuickAdd(rawInput, task, description);
+        await handleNoteQuickAdd(rawInput, task, description);
       } else if (inputType === 'chat') {
-        summary = await handleChatTranscriptQuickAdd(rawInput, task);
+        await handleChatTranscriptQuickAdd(rawInput, task);
       } else {
-        summary = await handleExtractionQuickAdd(inputType as ExtractionQuickAddType, rawInput, task);
+        await handleExtractionQuickAdd(inputType as ExtractionQuickAddType, rawInput, task);
       }
 
       console.log(`[QuickAdd] Completed: ${task}`);

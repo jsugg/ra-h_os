@@ -5,6 +5,27 @@ import { generateText } from 'ai';
 import { extractWebsite } from '@/services/typescript/extractors/website';
 import { formatNodeForChat } from '../infrastructure/nodeFormatter';
 
+interface ExtractedNodePayload {
+  success: boolean;
+  notes?: string;
+  chunk?: string;
+  metadata?: {
+    title?: string;
+    author?: string;
+    date?: string;
+    published_date?: string;
+    description?: string;
+    og_image?: string;
+    site_name?: string;
+    extraction_method?: string;
+  };
+  error?: string;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 // AI-powered content analysis
 async function analyzeContentWithAI(title: string, description: string, contentType: string) {
   try {
@@ -86,7 +107,7 @@ export const websiteExtractTool = tool({
         };
       }
 
-      let result: { success: boolean; notes?: string; chunk?: string; metadata?: any; error?: string };
+      let result: ExtractedNodePayload;
       
       try {
         const extractionResult = await extractWebsite(url);
@@ -104,10 +125,10 @@ export const websiteExtractTool = tool({
             extraction_method: 'typescript'
           }
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         result = { 
           success: false, 
-          error: error.message || 'TypeScript extraction failed' 
+          error: getErrorMessage(error) || 'TypeScript extraction failed' 
         };
       }
 

@@ -6,8 +6,7 @@
 import OpenAI from 'openai';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { 
-  createDatabaseConnection, 
-  serializeFloat32Vector,
+  createDatabaseConnection,
   batchProcess 
 } from './sqlite-vec';
 
@@ -18,19 +17,14 @@ interface Node {
   chunk_status?: string | null;
 }
 
-interface ChunkData {
-  content: string;
-  metadata: {
-    node_id: number;
-    chunk_index: number;
-    start_char: number;
-    end_char: number;
-  };
-}
-
 interface EmbedUniversalOptions {
   nodeId: number;
   verbose?: boolean;
+}
+
+interface ChunkStatsRow {
+  total_nodes: number;
+  total_chunks: number;
 }
 
 export class UniversalEmbedder {
@@ -108,7 +102,7 @@ export class UniversalEmbedder {
     nodeId: number,
     chunkContent: string,
     chunkIndex: number,
-    metadata: any
+    metadata: Record<string, unknown>
   ): Promise<void> {
     // Generate embedding
     const embedding = await this.generateEmbedding(chunkContent);
@@ -238,7 +232,7 @@ export class UniversalEmbedder {
       FROM chunks
     `);
     
-    const stats = statsStmt.get() as any;
+    const stats = statsStmt.get() as ChunkStatsRow;
     
     return {
       totalChunks: stats.total_chunks || 0,
@@ -277,7 +271,7 @@ export async function runCLI(args: string[]): Promise<void> {
   const embedder = new UniversalEmbedder();
   
   try {
-    const result = await embedder.processNode({ nodeId, verbose });
+    await embedder.processNode({ nodeId, verbose });
     
     if (verbose) {
       const stats = embedder.getStats();

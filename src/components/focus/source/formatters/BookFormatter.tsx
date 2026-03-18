@@ -1,12 +1,29 @@
 "use client";
 
-import { useCallback, useRef, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 interface BookFormatterProps {
   content: string;
   onTextSelect?: (text: string) => void;
   highlightedText?: string | null;
   highlightMatchIndex?: number;
+}
+
+function countMatches(text: string, searchLower: string): number {
+  if (!searchLower) return 0;
+
+  const textLower = text.toLowerCase();
+  let matchCount = 0;
+  let pos = 0;
+
+  while (pos < textLower.length) {
+    const index = textLower.indexOf(searchLower, pos);
+    if (index === -1) break;
+    matchCount += 1;
+    pos = index + 1;
+  }
+
+  return matchCount;
 }
 
 /**
@@ -16,8 +33,6 @@ interface BookFormatterProps {
  * Structure parsing can be done on-demand via AI.
  */
 export default function BookFormatter({ content, onTextSelect, highlightedText, highlightMatchIndex = 0 }: BookFormatterProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   // Handle text selection
   const handleMouseUp = useCallback(() => {
     if (!onTextSelect) return;
@@ -35,7 +50,7 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
   }, [onTextSelect]);
 
   // Compute all match positions in the full content
-  const matchPositions = useMemo(() => {
+  const _matchPositions = useMemo(() => {
     if (!highlightedText) return [];
     const positions: number[] = [];
     const searchText = highlightedText.toLowerCase();
@@ -50,14 +65,31 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
     return positions;
   }, [content, highlightedText]);
 
-  // Track which global match index we're at as we render paragraphs
-  const globalMatchCounter = useRef(0);
+  const paragraphs = useMemo(
+    () => content
+      .split(/\n\n+/)
+      .map(p => p.trim())
+      .filter(p => p.length > 0),
+    [content],
+  );
 
-  // Reset counter before each render
-  globalMatchCounter.current = 0;
+  const paragraphMatchOffsets = useMemo(() => {
+    if (!highlightedText) {
+      return paragraphs.map(() => 0);
+    }
+
+    const searchLower = highlightedText.toLowerCase();
+    let runningOffset = 0;
+
+    return paragraphs.map((paragraph) => {
+      const offset = runningOffset;
+      runningOffset += countMatches(paragraph, searchLower);
+      return offset;
+    });
+  }, [highlightedText, paragraphs]);
 
   // Render text with all highlights, marking current one specially
-  const renderWithHighlight = useCallback((text: string): React.ReactNode => {
+  const renderWithHighlight = (text: string, matchOffset: number): React.ReactNode => {
     if (!highlightedText) return text;
 
     const textLower = text.toLowerCase();
@@ -71,6 +103,7 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let pos = 0;
+    let localMatchIndex = 0;
 
     while (pos < textLower.length) {
       const index = textLower.indexOf(searchLower, pos);
@@ -82,8 +115,8 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
       }
 
       // Determine if this is the current match
-      const isCurrent = globalMatchCounter.current === highlightMatchIndex;
-      globalMatchCounter.current++;
+      const isCurrent = matchOffset + localMatchIndex === highlightMatchIndex;
+      localMatchIndex += 1;
 
       // Add highlighted match
       parts.push(
@@ -111,17 +144,10 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
     }
 
     return parts.length > 0 ? <>{parts}</> : text;
-  }, [highlightedText, highlightMatchIndex]);
-
-  // Split content into paragraphs (double newlines or single newlines with blank lines)
-  const paragraphs = content
-    .split(/\n\n+/)
-    .map(p => p.trim())
-    .filter(p => p.length > 0);
+  };
 
   return (
     <div 
-      ref={containerRef}
       onMouseUp={handleMouseUp}
       style={{
         maxWidth: '680px',
@@ -147,7 +173,7 @@ export default function BookFormatter({ content, onTextSelect, highlightedText, 
               hyphens: 'auto',
             }}
           >
-            {renderWithHighlight(para)}
+            {renderWithHighlight(para, paragraphMatchOffsets[idx] ?? 0)}
           </p>
         ))}
       </div>

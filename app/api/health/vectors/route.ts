@@ -2,6 +2,29 @@ import { NextResponse } from 'next/server';
 import { getSQLiteClient } from '@/services/database/sqlite-client';
 import { chunkService } from '@/services/database/chunks';
 
+interface ChunkStats {
+  total_chunks: number;
+  vectorized_chunks: number;
+  missing_embeddings: number;
+  coverage_percentage: number;
+}
+
+interface VectorStatsHealthy {
+  vec_chunks_count: number;
+  matches_chunk_embeddings: boolean;
+}
+
+interface VectorStatsError {
+  error: string;
+  suggestion: string;
+}
+
+type VectorStats = VectorStatsHealthy | VectorStatsError | null;
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function GET() {
   try {
     const sqlite = getSQLiteClient();
@@ -39,7 +62,7 @@ export async function GET() {
       // Test vector table health by attempting a simple query
       if (vectorExtensionTest) {
         try {
-          const result = sqlite.query('SELECT COUNT(*) as count FROM vec_chunks');
+          const result = sqlite.query<{ count: number }>('SELECT COUNT(*) as count FROM vec_chunks');
           const vecCount = Number(result.rows[0].count);
           
           vectorStats = {
@@ -48,10 +71,10 @@ export async function GET() {
           };
           
           vectorHealth = vecCount === vectorizedCount ? 'healthy' : 'inconsistent';
-        } catch (vecError: any) {
+        } catch (vecError: unknown) {
           vectorHealth = 'corrupted';
           vectorStats = {
-            error: vecError.message,
+            error: getErrorMessage(vecError),
             suggestion: 'Vector table may be corrupted and need recreation'
           };
         }
@@ -59,11 +82,11 @@ export async function GET() {
         vectorHealth = 'extension_unavailable';
       }
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       return NextResponse.json({
         status: 'error',
         message: 'Failed to collect vector statistics',
-        details: error.message
+        details: getErrorMessage(error)
       });
     }
 
@@ -79,20 +102,20 @@ export async function GET() {
       }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Vector health check failed:', error);
     return NextResponse.json({
       status: 'error',
       message: 'Health check failed',
-      details: error.message
+      details: getErrorMessage(error)
     });
   }
 }
 
 function generateRecommendations(
   vectorHealth: string, 
-  chunkStats: any, 
-  vectorStats: any
+  chunkStats: ChunkStats | null, 
+  vectorStats: VectorStats
 ): string[] {
   const recommendations: string[] = [];
 
@@ -108,7 +131,11 @@ function generateRecommendations(
     recommendations.push(`${chunkStats.missing_embeddings} chunks missing embeddings - consider running embedding generation`);
   }
 
-  if (vectorStats && !vectorStats.matches_chunk_embeddings) {
+  if (
+    vectorStats &&
+    'matches_chunk_embeddings' in vectorStats &&
+    !vectorStats.matches_chunk_embeddings
+  ) {
     recommendations.push('Vector count does not match chunk embeddings - database inconsistency detected');
   }
 

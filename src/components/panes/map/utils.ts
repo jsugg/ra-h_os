@@ -40,6 +40,34 @@ export interface RahNodeData {
   [key: string]: unknown;
 }
 
+type MapPosition = { x?: number; y?: number };
+
+function getMetadataRecord(node: DbNode): Record<string, unknown> | null {
+  if (typeof node.metadata === 'string') {
+    return safeParseJSON(node.metadata);
+  }
+  if (node.metadata && typeof node.metadata === 'object' && !Array.isArray(node.metadata)) {
+    return node.metadata;
+  }
+  return null;
+}
+
+function getSavedMapPosition(node: DbNode): MapPosition | null {
+  const metadata = getMetadataRecord(node);
+  const rawPosition = metadata?.map_position;
+  if (!rawPosition || typeof rawPosition !== 'object' || Array.isArray(rawPosition)) {
+    return null;
+  }
+  return rawPosition as MapPosition;
+}
+
+function getEdgeExplanation(edge: DbEdge): string {
+  if (edge.context && typeof edge.context === 'object' && !Array.isArray(edge.context)) {
+    return typeof edge.context.explanation === 'string' ? edge.context.explanation : '';
+  }
+  return '';
+}
+
 const NODE_LIMIT = 200;
 const LABEL_THRESHOLD = 15;
 
@@ -57,10 +85,7 @@ export function getNodePosition(
   maxEdges: number,
 ): { x: number; y: number } {
   // Check for saved position in metadata
-  const metadata = typeof node.metadata === 'string'
-    ? safeParseJSON(node.metadata)
-    : node.metadata;
-  const savedPos = metadata?.map_position;
+  const savedPos = getSavedMapPosition(node);
   if (savedPos?.x !== undefined && savedPos?.y !== undefined) {
     return { x: savedPos.x, y: savedPos.y };
   }
@@ -165,13 +190,10 @@ export function toRFNodes(
     const existingPos = existingPositions.get(id);
 
     // Check for saved metadata position
-    const metadata = typeof node.metadata === 'string'
-      ? safeParseJSON(node.metadata)
-      : node.metadata;
-    const savedPos = metadata?.map_position;
+    const savedPos = getSavedMapPosition(node);
 
     const pos = existingPos
-      || (savedPos?.x !== undefined ? { x: savedPos.x, y: savedPos.y } : null)
+      || (savedPos?.x !== undefined && savedPos?.y !== undefined ? { x: savedPos.x, y: savedPos.y } : null)
       || getExpandedNodePosition(index, uniqueExpanded.length, refX, refY);
 
     const isDimmed = hasSelection && node.id !== selectedNodeId && !connectedNodeIds.has(node.id);
@@ -216,7 +238,7 @@ export function toRFEdges(
       );
       const isDimmed = hasSelection && !isConnected;
 
-      const explanation = typeof e.context?.explanation === 'string' ? e.context.explanation : '';
+      const explanation = getEdgeExplanation(e);
 
       return {
         id: String(e.id),

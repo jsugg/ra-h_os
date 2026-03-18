@@ -38,11 +38,10 @@ export default function SplitHandle({
 
     // Calculate current width from container
     if (containerRef.current) {
-      const containerWidth = containerRef.current.offsetWidth - toolbarWidth;
       // Assume current position is at the split point
       startWidthRef.current = 50; // Default to 50% for new split
     }
-  }, [isSecondPaneOpen, onOpenSecondPane, containerRef, toolbarWidth]);
+  }, [isSecondPaneOpen, onOpenSecondPane, containerRef]);
 
   useEffect(() => {
     if (!isDragging) return;

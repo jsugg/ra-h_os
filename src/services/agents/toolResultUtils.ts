@@ -1,3 +1,51 @@
+type ToolTrace = {
+  step?: unknown;
+  purpose?: unknown;
+  thoughts?: unknown;
+  next_action?: unknown;
+};
+
+type WebSearchResult = {
+  title?: unknown;
+  url?: unknown;
+};
+
+type EmbeddingChunkResult = {
+  text?: unknown;
+  node_id?: unknown;
+};
+
+type QueryNodeResult = {
+  id?: unknown;
+  title?: unknown;
+  formatted_display?: unknown;
+};
+
+type QueryEdgeResult = {
+  from_node_id?: unknown;
+  to_node_id?: unknown;
+};
+
+type ToolResultData = {
+  message?: unknown;
+  trace?: unknown;
+  query?: unknown;
+  results?: unknown;
+  chunks?: unknown;
+  title?: unknown;
+  count?: unknown;
+  formatted_display?: unknown;
+  nodes?: unknown;
+  edges?: unknown;
+};
+
+type ToolResultPayload = {
+  success?: unknown;
+  error?: unknown;
+  message?: unknown;
+  data?: ToolResultData;
+};
+
 function ensureString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -12,7 +60,11 @@ function truncateOrDefault(value: string, limit = 180, fallback = ''): string {
   return `${value.slice(0, limit - 1)}…`;
 }
 
-export function summarizeToolExecution(toolName: string, args: any, result: any): string {
+function asRecord<T extends Record<string, unknown>>(value: unknown): T | null {
+  return typeof value === 'object' && value !== null ? (value as T) : null;
+}
+
+export function summarizeToolExecution(toolName: string, args: unknown, result: unknown): string {
   const fallback = `${toolName} completed.`;
 
   if (typeof result === 'string') {
@@ -20,26 +72,30 @@ export function summarizeToolExecution(toolName: string, args: any, result: any)
     return trimmed || fallback;
   }
 
-  if (!result || typeof result !== 'object') {
+  const resultRecord = asRecord<ToolResultPayload>(result);
+  if (!resultRecord) {
     return fallback;
   }
 
-  if (result.success === false) {
-    const error = ensureString(result.error) || 'unknown error';
+  if (resultRecord.success === false) {
+    const error = ensureString(resultRecord.error) || 'unknown error';
     return `${toolName} failed: ${error}`;
   }
 
-  const message = ensureString((result as any).message);
+  const message = ensureString(resultRecord.message);
   if (message) {
     return message;
   }
 
+  const resultData = asRecord<ToolResultData>(resultRecord.data);
+  const argsRecord = asRecord<Record<string, unknown>>(args);
+
   if (toolName === 'think') {
-    const trace = (result as any).data?.trace ?? args ?? {};
-    const step = ensureNumber(trace.step ?? args?.step);
-    const purpose = ensureString(trace.purpose ?? args?.purpose) || 'planning';
-    const thoughts = ensureString(trace.thoughts ?? args?.thoughts);
-    const next = ensureString(trace.next_action ?? args?.next_action);
+    const trace = asRecord<ToolTrace>(resultData?.trace) ?? argsRecord ?? {};
+    const step = ensureNumber(trace.step ?? argsRecord?.step);
+    const purpose = ensureString(trace.purpose ?? argsRecord?.purpose) || 'planning';
+    const thoughts = ensureString(trace.thoughts ?? argsRecord?.thoughts);
+    const next = ensureString(trace.next_action ?? argsRecord?.next_action);
 
     let summary = `Plan${step ? ` step ${step}` : ''}: ${truncateOrDefault(purpose, 120, purpose)}`;
     if (thoughts) {
@@ -52,12 +108,13 @@ export function summarizeToolExecution(toolName: string, args: any, result: any)
   }
 
   if (toolName === 'webSearch') {
-    const query = ensureString(args?.query) || ensureString(result.data?.query);
-    const results = Array.isArray(result.data?.results) ? result.data.results : [];
+    const query = ensureString(argsRecord?.query) || ensureString(resultData?.query);
+    const results = Array.isArray(resultData?.results) ? resultData.results : [];
     if (results.length > 0) {
-      const items = results.slice(0, 3).map((entry: any) => {
-        const title = ensureString(entry.title) || ensureString(entry.url) || 'Result';
-        const url = ensureString(entry.url);
+      const items = results.slice(0, 3).map((entry) => {
+        const searchResult = asRecord<WebSearchResult>(entry) ?? {};
+        const title = ensureString(searchResult.title) || ensureString(searchResult.url) || 'Result';
+        const url = ensureString(searchResult.url);
         return url ? `${truncateOrDefault(title, 80, title)} (${url})` : truncateOrDefault(title, 80, title);
       });
       return `Web search${query ? ` for "${truncateOrDefault(query, 60, query)}"` : ''}: ${items.join('; ')}`;
@@ -66,10 +123,10 @@ export function summarizeToolExecution(toolName: string, args: any, result: any)
   }
 
   if (toolName === 'searchContentEmbeddings') {
-    const query = ensureString(args?.query) || ensureString(result.data?.query);
-    const chunks = Array.isArray(result.data?.chunks) ? result.data.chunks : [];
+    const query = ensureString(argsRecord?.query) || ensureString(resultData?.query);
+    const chunks = Array.isArray(resultData?.chunks) ? resultData.chunks : [];
     if (chunks.length > 0) {
-      const top = chunks[0];
+      const top = asRecord<EmbeddingChunkResult>(chunks[0]) ?? {};
       const snippet = ensureString(top.text);
       const nodeId = ensureNumber(top.node_id);
       const preview = truncateOrDefault(snippet, 160, snippet);
@@ -79,8 +136,8 @@ export function summarizeToolExecution(toolName: string, args: any, result: any)
   }
 
   if (toolName === 'youtubeExtract') {
-    const title = ensureString(result.data?.title) || ensureString(args?.title);
-    const formatted = ensureString(result.data?.formatted_display);
+    const title = ensureString(resultData?.title) || ensureString(argsRecord?.title);
+    const formatted = ensureString(resultData?.formatted_display);
     if (formatted) {
       return `YouTube extract created ${formatted}.`;
     }
@@ -91,42 +148,46 @@ export function summarizeToolExecution(toolName: string, args: any, result: any)
   }
 
   if (toolName === 'queryNodes') {
-    const nodes = Array.isArray(result.data?.nodes) ? result.data.nodes : [];
+    const nodes = Array.isArray(resultData?.nodes) ? resultData.nodes : [];
     if (nodes.length > 0) {
       const labels = nodes
         .slice(0, 3)
-        .map((node: any) => ensureString(node.formatted_display) || ensureString(node.title) || `[NODE:${node.id}]`)
+        .map((node) => {
+          const queryNode = asRecord<QueryNodeResult>(node) ?? {};
+          return ensureString(queryNode.formatted_display) || ensureString(queryNode.title) || `[NODE:${String(queryNode.id ?? '?')}]`;
+        })
         .join(', ');
       return `Found ${nodes.length} node(s): ${labels}`;
     }
   }
 
   if (toolName === 'queryEdge') {
-    const edges = Array.isArray(result.data?.edges) ? result.data.edges : [];
+    const edges = Array.isArray(resultData?.edges) ? resultData.edges : [];
     if (edges.length > 0) {
-      const edge = edges[0];
-      return `Found ${edges.length} edge(s), e.g., ${edge.from_node_id} → ${edge.to_node_id}.`;
+      const edge = asRecord<QueryEdgeResult>(edges[0]) ?? {};
+      return `Found ${edges.length} edge(s), e.g., ${String(edge.from_node_id ?? '?')} → ${String(edge.to_node_id ?? '?')}.`;
     }
     return 'No edges found.';
   }
 
-  if (result.data?.formatted_display) {
-    return ensureString(result.data.formatted_display) || fallback;
+  if (resultData?.formatted_display) {
+    return ensureString(resultData.formatted_display) || fallback;
   }
 
-  if (result.data?.title) {
-    return `Processed "${truncateOrDefault(ensureString(result.data.title), 80, result.data.title)}".`;
+  if (resultData?.title) {
+    const title = ensureString(resultData.title);
+    return `Processed "${truncateOrDefault(title, 80, title)}".`;
   }
 
-  if (result.data?.count !== undefined) {
-    const count = result.data.count;
+  if (resultData?.count !== undefined) {
+    const count = resultData.count;
     return `${toolName} returned ${count} item(s).`;
   }
 
   try {
-    const preview = JSON.stringify(result.data ?? result);
+    const preview = JSON.stringify(resultData ?? resultRecord);
     return truncateOrDefault(preview, 200, fallback);
-  } catch (error) {
+  } catch (_error) {
     return fallback;
   }
 }

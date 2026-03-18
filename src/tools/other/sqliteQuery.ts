@@ -100,8 +100,8 @@ export const sqliteQueryTool = tool({
       }
 
       // Parse JSON output if requested
-      let data: any = stdout.trim();
-      if (format === 'json' && data) {
+      let data: unknown = stdout.trim();
+      if (format === 'json' && typeof data === 'string' && data) {
         try {
           data = JSON.parse(data);
         } catch {
@@ -125,9 +125,10 @@ export const sqliteQueryTool = tool({
         message: `Query returned ${rowCount} row${rowCount !== 1 ? 's' : ''}.`,
       };
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const execError = error as { killed?: boolean; message?: string };
       // Handle timeout
-      if (error.killed) {
+      if (execError.killed) {
         return {
           success: false,
           error: 'Query timed out after 5 seconds. Try a simpler query or add LIMIT.',
@@ -137,7 +138,7 @@ export const sqliteQueryTool = tool({
 
       return {
         success: false,
-        error: error.message || 'Query execution failed',
+        error: execError.message || 'Query execution failed',
         data: null,
       };
     }

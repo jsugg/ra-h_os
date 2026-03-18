@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { edgeService } from '@/services/database';
 import { validateEdgeExplanation } from '@/services/database/quality';
+import type { EdgeCreatedVia } from '@/types/database';
 
 export const runtime = 'nodejs';
 
@@ -72,7 +73,7 @@ export async function POST(request: NextRequest) {
     const skipInference = Boolean(body.skip_inference);
     const createdVia = (() => {
       const raw = typeof body.created_via === 'string' ? body.created_via : '';
-      if (['ui', 'agent', 'mcp', 'workflow', 'quicklink'].includes(raw)) return raw as any;
+      if (['ui', 'agent', 'mcp', 'workflow', 'quicklink'].includes(raw)) return raw as EdgeCreatedVia;
       return 'ui' as const;
     })();
 

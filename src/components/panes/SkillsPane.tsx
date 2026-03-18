@@ -28,6 +28,7 @@ export default function SkillsPane({
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
+  const selectedSkillName = selectedSkill?.name;
 
   useEffect(() => {
     void fetchSkills();
@@ -45,10 +46,10 @@ export default function SkillsPane({
   }, []);
 
   useEffect(() => {
-    if (selectedSkill && detailScrollRef.current) {
+    if (selectedSkillName && detailScrollRef.current) {
       detailScrollRef.current.scrollTo({ top: 0, behavior: 'auto' });
     }
-  }, [selectedSkill?.name]);
+  }, [selectedSkillName]);
 
   const fetchSkills = async () => {
     try {

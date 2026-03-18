@@ -55,9 +55,16 @@ export default function QuickAddInput({ onSubmit, isOpen, onClose }: QuickAddInp
 
   const isControlled = isOpen !== undefined;
   const isExpanded = isControlled ? isOpen : isExpandedInternal;
-  const setIsExpanded = isControlled
-    ? (value: boolean) => { if (!value && onClose) onClose(); }
-    : setIsExpandedInternal;
+  const setIsExpanded = useMemo(
+    () => (
+      isControlled
+        ? (value: boolean) => {
+            if (!value && onClose) onClose();
+          }
+        : setIsExpandedInternal
+    ),
+    [isControlled, onClose],
+  );
 
   const detectedType = useMemo(() => detectType(input), [input]);
   const showTypePill = input.trim().length > 0 && !uploadedFile;
@@ -85,7 +92,7 @@ export default function QuickAddInput({ onSubmit, isOpen, onClose }: QuickAddInp
     } finally {
       setIsPosting(false);
     }
-  }, []);
+  }, [setIsExpanded]);
 
   const handleSubmit = async () => {
     if (uploadedFile) {

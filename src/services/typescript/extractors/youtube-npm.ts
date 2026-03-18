@@ -36,6 +36,10 @@ interface ExtractionResult {
 }
 
 export class YouTubeExtractor {
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   /**
    * Extract video ID from YouTube URL
    */
@@ -124,8 +128,8 @@ export class YouTubeExtractor {
         language: 'en'
       };
       
-    } catch (error: any) {
-      throw new Error(`Failed to extract YouTube transcript: ${error.message}`);
+    } catch (error: unknown) {
+      throw new Error(`Failed to extract YouTube transcript: ${this.getErrorMessage(error)}`);
     }
   }
 
@@ -174,13 +178,13 @@ export class YouTubeExtractor {
         metadata
       };
       
-    } catch (error: any) {
+    } catch (error: unknown) {
       return {
         success: false,
         content: '',
         chunk: '',  // Tool expects this field
         metadata: {} as YouTubeMetadata,
-        error: error.message
+        error: this.getErrorMessage(error)
       };
     }
   }

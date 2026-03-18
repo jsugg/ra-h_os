@@ -6,7 +6,7 @@
 // Import pdf-parse directly from lib to avoid index.js debug side effects
 // (pdf-parse/index.js conditionally reads ./test/data/05-versions-space.pdf when module.parent is falsy in some bundles)
 // See: node_modules/pdf-parse/index.js
-// eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const pdf = require('pdf-parse/lib/pdf-parse.js');
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -15,7 +15,7 @@ import * as os from 'os';
 interface PaperMetadata {
   title?: string;
   pages: number;
-  info?: any;
+  info?: Record<string, unknown>;
   text_length: number;
   filename?: string;
   extraction_method?: string;
@@ -421,8 +421,8 @@ export async function runCLI(args: string[]): Promise<void> {
     const result = await extractPaper(url);
     // Output as JSON for compatibility with existing tools
     console.log(JSON.stringify(result, null, 2));
-  } catch (error: any) {
-    console.error('Error:', error.message);
+  } catch (error: unknown) {
+    console.error('Error:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useRef } from 'react';
+import { useMemo, useCallback } from 'react';
 
 interface TranscriptFormatterProps {
   content: string;
@@ -13,6 +13,23 @@ interface TranscriptSegment {
   timestamp: string;
   speaker: string | null;
   text: string;
+}
+
+function countMatches(text: string, searchLower: string): number {
+  if (!searchLower) return 0;
+
+  const textLower = text.toLowerCase();
+  let matchCount = 0;
+  let pos = 0;
+
+  while (pos < textLower.length) {
+    const index = textLower.indexOf(searchLower, pos);
+    if (index === -1) break;
+    matchCount += 1;
+    pos = index + 1;
+  }
+
+  return matchCount;
 }
 
 // Timestamp patterns for parsing
@@ -81,13 +98,21 @@ function parseTranscript(content: string): TranscriptSegment[] {
  * Transcript Formatter - Clean view for timestamped content
  */
 export default function TranscriptFormatter({ content, onTextSelect, highlightedText, highlightMatchIndex = 0 }: TranscriptFormatterProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const globalMatchCounter = useRef(0);
-
-  // Reset counter before each render
-  globalMatchCounter.current = 0;
-
   const segments = useMemo(() => parseTranscript(content), [content]);
+  const segmentMatchOffsets = useMemo(() => {
+    if (!highlightedText) {
+      return segments.map(() => 0);
+    }
+
+    const searchLower = highlightedText.toLowerCase();
+    let runningOffset = 0;
+
+    return segments.map((segment) => {
+      const offset = runningOffset;
+      runningOffset += countMatches(segment.text, searchLower);
+      return offset;
+    });
+  }, [highlightedText, segments]);
 
   const handleMouseUp = useCallback(() => {
     if (!onTextSelect) return;
@@ -104,7 +129,7 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
     }
   }, [onTextSelect]);
 
-  const renderWithHighlight = useCallback((text: string): React.ReactNode => {
+  const renderWithHighlight = (text: string, matchOffset: number): React.ReactNode => {
     if (!highlightedText) return text;
 
     const textLower = text.toLowerCase();
@@ -117,6 +142,7 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
     const parts: React.ReactNode[] = [];
     let lastIndex = 0;
     let pos = 0;
+    let localMatchIndex = 0;
 
     while (pos < textLower.length) {
       const index = textLower.indexOf(searchLower, pos);
@@ -126,8 +152,8 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
         parts.push(text.slice(lastIndex, index));
       }
 
-      const isCurrent = globalMatchCounter.current === highlightMatchIndex;
-      globalMatchCounter.current++;
+      const isCurrent = matchOffset + localMatchIndex === highlightMatchIndex;
+      localMatchIndex += 1;
 
       parts.push(
         <mark
@@ -153,7 +179,7 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
     }
 
     return parts.length > 0 ? <>{parts}</> : text;
-  }, [highlightedText, highlightMatchIndex]);
+  };
 
   if (segments.length === 0) {
     return (
@@ -171,7 +197,6 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
 
   return (
     <div 
-      ref={containerRef}
       onMouseUp={handleMouseUp}
       style={{
         maxWidth: '680px',
@@ -220,7 +245,7 @@ export default function TranscriptFormatter({ content, onTextSelect, highlighted
             whiteSpace: 'pre-wrap',
             wordWrap: 'break-word',
           }}>
-            {renderWithHighlight(segment.text)}
+            {renderWithHighlight(segment.text, segmentMatchOffsets[index] ?? 0)}
           </div>
         </div>
       ))}

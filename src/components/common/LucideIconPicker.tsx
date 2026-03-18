@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import { createElement, useState, useMemo } from 'react';
 import {
   // Core
   Folder,
@@ -286,8 +286,7 @@ export function DynamicIcon({
   className?: string;
   style?: React.CSSProperties;
 }) {
-  const IconComponent = getIconByName(name);
-  return <IconComponent size={size} className={className} style={style} />;
+  return createElement(getIconByName(name), { size, className, style });
 }
 
 interface LucideIconPickerProps {
@@ -410,7 +409,7 @@ export default function LucideIconPicker({ selectedIcon, onSelect, onClose }: Lu
           color: '#666',
           fontSize: '13px'
         }}>
-          No icons match "{searchQuery}"
+          No icons match &quot;{searchQuery}&quot;
         </div>
       )}
     </div>

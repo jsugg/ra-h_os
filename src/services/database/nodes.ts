@@ -56,7 +56,7 @@ export class NodeService {
     const sqlite = getSQLiteClient();
 
     let query = `SELECT COUNT(*) as total FROM nodes n WHERE 1=1`;
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (dimensions && dimensions.length > 0) {
       if (dimensionsMatch === 'all' && dimensions.length > 1) {
@@ -113,7 +113,7 @@ export class NodeService {
       FROM nodes n
       WHERE 1=1
     `;
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     // Filter by dimensions (SQLite JOIN with node_dimensions)
     if (dimensions && dimensions.length > 0) {
@@ -322,7 +322,7 @@ export class NodeService {
     sqlite.transaction(() => {
       // Update node columns (only update provided fields)
       const setFields: string[] = [];
-      const params: any[] = [];
+      const params: unknown[] = [];
       
       if (title !== undefined) { setFields.push('title = ?'); params.push(title); }
       if (description !== undefined) { setFields.push('description = ?'); params.push(description); }
@@ -412,7 +412,7 @@ export class NodeService {
     };
   }
 
-  private buildNodeFilterClauses(filters: NodeFilters, alias = 'n'): { clauses: string[]; params: any[] } {
+  private buildNodeFilterClauses(filters: NodeFilters, alias = 'n'): { clauses: string[]; params: unknown[] } {
     const {
       dimensions,
       dimensionsMatch = 'any',
@@ -423,7 +423,7 @@ export class NodeService {
     } = filters;
 
     const clauses: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     if (dimensions && dimensions.length > 0) {
       if (dimensionsMatch === 'all' && dimensions.length > 1) {
@@ -664,7 +664,7 @@ export class NodeService {
 
   async getNodeCount(): Promise<number> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query('SELECT COUNT(*) as count FROM nodes');
+    const result = sqlite.query<{ count: number }>('SELECT COUNT(*) as count FROM nodes');
     return Number(result.rows[0].count);
   }
 
@@ -680,9 +680,6 @@ export class NodeService {
 
   private async bulkUpdateNodesSQLite(ids: number[], updates: Partial<Node>): Promise<Node[]> {
     // For SQLite, use IN (SELECT value FROM json_each(?)) for safety
-    const sqlite = getSQLiteClient();
-    const idsJson = JSON.stringify(ids);
-    
     // For now, just update one by one - could optimize later
     const updatedNodes: Node[] = [];
     for (const id of ids) {

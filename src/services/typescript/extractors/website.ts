@@ -27,6 +27,10 @@ export class WebsiteExtractor {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
   };
 
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+  }
+
   /**
    * Extract content using Jina.ai Reader API
    * Used as fallback when cheerio fails (JS-rendered sites, Twitter, SPAs)
@@ -280,18 +284,18 @@ export class WebsiteExtractor {
       }
 
       console.log('[WebsiteExtractor] Cheerio extraction too short, trying Jina...');
-    } catch (error: any) {
-      if (error.name === 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new Error('Request timeout - website took too long to respond');
       }
-      console.log('[WebsiteExtractor] Cheerio failed, trying Jina...', error.message);
+      console.log('[WebsiteExtractor] Cheerio failed, trying Jina...', this.getErrorMessage(error));
     }
 
     // Fallback to Jina for JS-rendered sites
     try {
       return await this.extractWithJina(url);
-    } catch (jinaError: any) {
-      throw new Error(`Extraction failed: ${jinaError.message}`);
+    } catch (jinaError: unknown) {
+      throw new Error(`Extraction failed: ${this.getErrorMessage(jinaError)}`);
     }
   }
 }
@@ -319,8 +323,8 @@ export async function runCLI(args: string[]): Promise<void> {
     const result = await extractWebsite(url);
     // Output as JSON for compatibility with existing tools
     console.log(JSON.stringify(result, null, 2));
-  } catch (error: any) {
-    console.error('Error:', error.message);
+  } catch (error: unknown) {
+    console.error('Error:', error instanceof Error ? error.message : String(error));
     process.exit(1);
   }
 }

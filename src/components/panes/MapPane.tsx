@@ -7,7 +7,6 @@ import {
   MiniMap,
   useNodesState,
   useEdgesState,
-  addEdge as rfAddEdge,
   type Connection,
   type NodeMouseHandler,
   type Node as RFNode,
@@ -52,8 +51,8 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
 
 function MapPaneInner({
   slot,
-  isActive,
-  onPaneAction,
+  isActive: _isActive,
+  onPaneAction: _onPaneAction,
   onCollapse,
   onSwapPanes,
   tabBar,
@@ -173,16 +172,17 @@ function MapPaneInner({
 
   // ----- Sync DB data → React Flow nodes/edges -----
   useEffect(() => {
+    rfNodes.forEach(n => {
+      rfPositionsRef.current.set(n.id, n.position);
+    });
+  }, [rfNodes]);
+
+  useEffect(() => {
     if (allDbNodes.length === 0) {
       setRfNodes([]);
       setRfEdges([]);
       return;
     }
-
-    // Capture current RF positions before rebuild
-    rfNodes.forEach(n => {
-      rfPositionsRef.current.set(n.id, n.position);
-    });
 
     const centerX = 600;
     const centerY = 400;
@@ -203,7 +203,7 @@ function MapPaneInner({
 
     setRfNodes(newRfNodes);
     setRfEdges(newRfEdges);
-  }, [allDbNodes, baseNodes, expandedNodes, dbEdges, selectedNodeId, connectedNodeIds]);
+  }, [allDbNodes, baseNodes, connectedNodeIds, dbEdges, dimensionIcons, expandedNodes, selectedNodeId, setRfEdges, setRfNodes]);
 
   // ----- Node traversal: fetch connected nodes -----
   const fetchConnectedNodes = useCallback(async (nodeId: number) => {
@@ -278,7 +278,7 @@ function MapPaneInner({
         }
       })();
     }
-  }, [activeTabId]);
+  }, [activeTabId, allDbNodes, reactFlowInstance, rfNodes]);
 
   // ----- SSE real-time sync -----
   useEffect(() => {

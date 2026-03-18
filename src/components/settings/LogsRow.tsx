@@ -31,6 +31,11 @@ interface SnapshotMetrics {
   system_message?: string;
 }
 
+interface ToolTiming {
+  toolName?: string;
+  durationMs?: number;
+}
+
 export default function LogsRow({ log, isEven }: LogsRowProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -228,7 +233,7 @@ export default function LogsRow({ log, isEven }: LogsRowProps) {
                     Tool Timings
                   </div>
                   <div style={{ fontSize: '11px', color: '#ccc', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                    {metrics.tool_timings.map((tool: any, index: number) => (
+                    {metrics.tool_timings.map((tool: ToolTiming, index: number) => (
                       <span key={`${tool.toolName || 'tool'}-${index}`}>
                         {tool.toolName || 'tool'} {tool.durationMs ?? 0}ms
                       </span>

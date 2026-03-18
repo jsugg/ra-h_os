@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from 'react';
-import { Video, FileText, File, Globe, Folder } from 'lucide-react';
+import { Video, FileText, File, Globe } from 'lucide-react';
 import { Node } from '@/types/database';
 import { getIconByName } from '@/components/common/LucideIconPicker';
 
@@ -47,6 +47,13 @@ export function getNodeIcon(
   dimensionIcons?: Record<string, string>,
   size: number = 16,
 ): React.ReactElement {
+  const metadataType = (
+    node.metadata &&
+    typeof node.metadata === 'object' &&
+    !Array.isArray(node.metadata) &&
+    typeof node.metadata.type === 'string'
+  ) ? node.metadata.type : undefined;
+
   // If node has a link, use URL-derived icon (primary)
   if (node.link) {
     const url = node.link.toLowerCase();
@@ -57,7 +64,7 @@ export function getNodeIcon(
     }
 
     // PDFs and papers
-    if (url.endsWith('.pdf') || node.metadata?.type === 'paper') {
+    if (url.endsWith('.pdf') || metadataType === 'paper') {
       return <FileText size={size} color="#94a3b8" />;
     }
 

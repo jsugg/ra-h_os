@@ -28,7 +28,6 @@ export const queryEdgeTool = tool({
     console.log('🔍 QueryEdge tool called with filters:', JSON.stringify(filters, null, 2));
     
     try {
-      let result;
       let message = '';
 
       // Handle specific edge ID lookup

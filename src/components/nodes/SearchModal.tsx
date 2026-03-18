@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import Chip from '../common/Chip';
 import { getNodeIcon } from '@/utils/nodeIcons';
 import { useDimensionIcons } from '@/context/DimensionIconsContext';
+import type { Node } from '@/types/database';
 
 interface SearchModalProps {
   isOpen: boolean;
@@ -18,6 +19,11 @@ interface NodeSuggestion {
   title: string;
   dimensions?: string[];
   link?: string;
+}
+
+interface SearchApiResponse {
+  success: boolean;
+  data: NodeSuggestion[];
 }
 
 export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFilters }: SearchModalProps) {
@@ -97,18 +103,15 @@ export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFil
 
   // Generate suggestions based on search query
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSuggestions([]);
-      return;
-    }
+    if (!searchQuery.trim()) return;
 
     const fetchSuggestions = async () => {
       try {
         const response = await fetch(`/api/nodes/search?q=${encodeURIComponent(searchQuery)}&limit=10`);
-        const result = await response.json();
+        const result = (await response.json()) as SearchApiResponse;
         
         if (result.success) {
-          const nodeSuggestions: NodeSuggestion[] = result.data.map((node: any) => ({
+          const nodeSuggestions: NodeSuggestion[] = result.data.map((node) => ({
             id: node.id,
             title: node.title,
             dimensions: node.dimensions || [],
@@ -186,7 +189,14 @@ export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFil
             ref={inputRef}
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              const nextValue = e.target.value;
+              setSearchQuery(nextValue);
+              if (!nextValue.trim()) {
+                setSuggestions([]);
+                setSelectedIndex(0);
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder={existingFilters.length === 0 ? "Search nodes..." : ""}
             className="search-input"
@@ -201,6 +211,16 @@ export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFil
         {suggestions.length > 0 && (
           <div className="search-results">
             {suggestions.map((suggestion, index) => (
+              (() => {
+                const iconNode: Node = {
+                  id: suggestion.id,
+                  title: suggestion.title,
+                  dimensions: suggestion.dimensions || [],
+                  link: suggestion.link,
+                  created_at: '',
+                  updated_at: '',
+                };
+                return (
               <button
                 key={suggestion.id}
                 onClick={() => handleSelectSuggestion(suggestion)}
@@ -208,12 +228,14 @@ export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFil
                 className={`search-result-item ${index === selectedIndex ? 'selected' : ''}`}
               >
                 <span className="result-id">{suggestion.id}</span>
-                <span className="result-icon">{getNodeIcon(suggestion as any, dimensionIcons, 14)}</span>
+                <span className="result-icon">{getNodeIcon(iconNode, dimensionIcons, 14)}</span>
                 <span className="result-title">{suggestion.title}</span>
                 {index === selectedIndex && (
                   <span className="result-hint">↵</span>
                 )}
               </button>
+                );
+              })()
             ))}
           </div>
         )}
@@ -221,7 +243,7 @@ export default function SearchModal({ isOpen, onClose, onNodeSelect, existingFil
         {/* Empty state */}
         {searchQuery && suggestions.length === 0 && (
           <div className="search-empty">
-            No results for "{searchQuery}"
+            No results for &quot;{searchQuery}&quot;
           </div>
         )}
       </div>

@@ -110,7 +110,6 @@ export class AutoEmbedQueue {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var autoEmbedQueue: AutoEmbedQueue | undefined;
 }
 

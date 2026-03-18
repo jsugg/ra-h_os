@@ -5,6 +5,10 @@ import { Plus, GripVertical, X } from 'lucide-react';
 import { Node } from '@/types/database';
 import { KanbanColumn } from '@/types/views';
 
+function createKanbanColumnId(): string {
+  return `col-${crypto.randomUUID()}`;
+}
+
 interface KanbanViewProps {
   nodes: Node[];
   columns: KanbanColumn[];
@@ -45,7 +49,7 @@ export default function KanbanView({
 
   const handleAddColumn = (dimension: string) => {
     const newColumn: KanbanColumn = {
-      id: `col-${Date.now()}`,
+      id: createKanbanColumnId(),
       dimension,
       order: columns.length
     };

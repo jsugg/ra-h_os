@@ -170,7 +170,7 @@ export class ChunkService {
   private async updateChunkSQLite(id: number, updates: Partial<Chunk>): Promise<Chunk> {
     const sqlite = getSQLiteClient();
     const updateFields: string[] = [];
-    const params: any[] = [];
+    const params: unknown[] = [];
 
     // Build dynamic update query
     Object.entries(updates).forEach(([key, value]) => {
@@ -467,25 +467,25 @@ export class ChunkService {
 
   async getChunkCount(): Promise<number> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query('SELECT COUNT(*) as count FROM chunks');
+    const result = sqlite.query<{ count: number }>('SELECT COUNT(*) as count FROM chunks');
     return Number(result.rows[0].count);
   }
 
   async getChunkCountByNodeId(nodeId: number): Promise<number> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query('SELECT COUNT(*) as count FROM chunks WHERE node_id = ?', [nodeId]);
+    const result = sqlite.query<{ count: number }>('SELECT COUNT(*) as count FROM chunks WHERE node_id = ?', [nodeId]);
     return Number(result.rows[0].count);
   }
 
   async getNodesWithChunks(): Promise<Array<{ node_id: number; chunk_count: number }>> {
     const sqlite = getSQLiteClient();
-    const result = sqlite.query(`
+    const result = sqlite.query<{ node_id: number; chunk_count: number }>(`
       SELECT node_id, COUNT(*) as chunk_count
       FROM chunks 
       GROUP BY node_id
       ORDER BY chunk_count DESC
     `);
-    return result.rows.map((row: any) => ({
+    return result.rows.map((row) => ({
       node_id: Number(row.node_id),
       chunk_count: Number(row.chunk_count)
     }));

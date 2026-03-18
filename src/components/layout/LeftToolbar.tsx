@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Search,
   Plus,
@@ -93,7 +93,7 @@ interface PaneTypeButtonProps {
   onClick: () => void;
 }
 
-function PaneTypeButton({ icon: Icon, label, paneType, isOpen, isActivePane, onClick }: PaneTypeButtonProps) {
+function PaneTypeButton({ icon: Icon, label, paneType: _paneType, isOpen, isActivePane, onClick }: PaneTypeButtonProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   // Determine color: green if open, brighter if it's the active pane
